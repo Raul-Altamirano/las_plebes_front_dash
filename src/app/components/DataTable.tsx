@@ -21,7 +21,6 @@ import { useProductsStore } from '../store/ProductsContext';
 import { useCategories } from '../store/CategoryContext';
 import { useAudit } from '../store/AuditContext';
 import { useToast } from '../store/ToastContext';
-import { calculateTotalStock } from '../utils/productStateHelpers';
 import type { Product } from '../types/product';
 import { Badge } from './Badge';
 import { PriceWithDiscount } from './PriceWithDiscount';
