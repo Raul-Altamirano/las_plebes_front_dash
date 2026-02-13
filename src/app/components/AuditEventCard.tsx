@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { type AuditEvent } from '../types/audit';
 import { getEntityTypeLabel, getFieldLabel } from '../utils/auditHelpers';
