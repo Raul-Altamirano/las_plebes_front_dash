@@ -1,0 +1,19 @@
+{
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "env": {
+    "VITE_PRESIGN_ENDPOINT": {
+      "description": "Endpoint de AWS API Gateway para obtener URLs firmadas de S3",
+      "value": "https://bqpimqkhkl.execute-api.us-east-1.amazonaws.com/dev/vehicles/upload-url"
+    },
+    "VITE_UPLOAD_FOLDER": {
+      "description": "Carpeta destino en S3 para las imágenes",
+      "value": "products"
+    },
+    "VITE_S3_BASE_URL": {
+      "description": "(Opcional) URL base del bucket S3 si el backend no devuelve publicUrl",
+      "value": ""
+    }
+  }
+}

@@ -1,0 +1,1493 @@
+[
+  {
+    "ts": 1738972800000,
+    "date": "2026-02-08",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_001",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738973100000,
+    "date": "2026-02-08",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_001",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_m_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738976400000,
+    "date": "2026-02-08",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_002",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "vestido bordado",
+      "resultsCount": 12
+    }
+  },
+  {
+    "ts": 1738980000000,
+    "date": "2026-02-08",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_002",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1738981200000,
+    "date": "2026-02-08",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_002",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_l_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "L"
+    }
+  },
+  {
+    "ts": 1739059200000,
+    "date": "2026-02-09",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_003",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1739062800000,
+    "date": "2026-02-09",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_004",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "blusa tradicional",
+      "resultsCount": 8
+    }
+  },
+  {
+    "ts": 1739066400000,
+    "date": "2026-02-09",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_005",
+    "userId": "user_001",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_s_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "S",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1739145600000,
+    "date": "2026-02-10",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_006",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1739149200000,
+    "date": "2026-02-10",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_007",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1739152800000,
+    "date": "2026-02-10",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_008",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "vestido bordado",
+      "resultsCount": 12
+    }
+  },
+  {
+    "ts": 1739156400000,
+    "date": "2026-02-10",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_009",
+    "userId": "user_002",
+    "source": "FAVORITES",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_m_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "M",
+      "action": "removed"
+    }
+  },
+  {
+    "ts": 1739232000000,
+    "date": "2026-02-11",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_010",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1739235600000,
+    "date": "2026-02-11",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_010",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_m_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "M"
+    }
+  },
+  {
+    "ts": 1739239200000,
+    "date": "2026-02-11",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_011",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "falda típica",
+      "resultsCount": 5
+    }
+  },
+  {
+    "ts": 1739242800000,
+    "date": "2026-02-11",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_012",
+    "userId": "user_003",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_004",
+      "variantId": "var_004_l_negro",
+      "productName": "Rebozo Chiapaneco",
+      "color": "Negro",
+      "size": "L",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1739242900000,
+    "date": "2026-02-11",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_013",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_004",
+      "productName": "Rebozo Chiapaneco"
+    }
+  },
+  {
+    "ts": 1739145600000,
+    "date": "2026-02-07",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_014",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1739149200000,
+    "date": "2026-02-07",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_015",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "blusa tradicional",
+      "resultsCount": 8
+    }
+  },
+  {
+    "ts": 1739152800000,
+    "date": "2026-02-07",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_016",
+    "userId": "user_004",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_m_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1739068800000,
+    "date": "2026-02-06",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_017",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1739072400000,
+    "date": "2026-02-06",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_018",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1739076000000,
+    "date": "2026-02-06",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_019",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "vestido bordado",
+      "resultsCount": 12
+    }
+  },
+  {
+    "ts": 1739079600000,
+    "date": "2026-02-06",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_020",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_s_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "S"
+    }
+  },
+  {
+    "ts": 1738982400000,
+    "date": "2026-02-05",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_021",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738986000000,
+    "date": "2026-02-05",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_022",
+    "userId": "user_005",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_l_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "L",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738989600000,
+    "date": "2026-02-05",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_023",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "huipil",
+      "resultsCount": 6
+    }
+  },
+  {
+    "ts": 1738993200000,
+    "date": "2026-02-05",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_024",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_004",
+      "productName": "Rebozo Chiapaneco"
+    }
+  },
+  {
+    "ts": 1738896000000,
+    "date": "2026-02-04",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_025",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "blusa tradicional",
+      "resultsCount": 8
+    }
+  },
+  {
+    "ts": 1738899600000,
+    "date": "2026-02-04",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_026",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738903200000,
+    "date": "2026-02-04",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_027",
+    "userId": "user_006",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_005",
+      "variantId": "var_005_m_verde",
+      "productName": "Camisa Guayabera",
+      "color": "Verde",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738906800000,
+    "date": "2026-02-04",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_028",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_s_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "S"
+    }
+  },
+  {
+    "ts": 1738809600000,
+    "date": "2026-02-03",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_029",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_005",
+      "productName": "Camisa Guayabera"
+    }
+  },
+  {
+    "ts": 1738813200000,
+    "date": "2026-02-03",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_030",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "camisa",
+      "resultsCount": 4
+    }
+  },
+  {
+    "ts": 1738816800000,
+    "date": "2026-02-03",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_031",
+    "userId": "user_007",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_l_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "L",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738820400000,
+    "date": "2026-02-03",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_032",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1738723200000,
+    "date": "2026-02-02",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_033",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "vestido bordado",
+      "resultsCount": 12
+    }
+  },
+  {
+    "ts": 1738726800000,
+    "date": "2026-02-02",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_034",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1738730400000,
+    "date": "2026-02-02",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_035",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_s_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "S"
+    }
+  },
+  {
+    "ts": 1738734000000,
+    "date": "2026-02-02",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_036",
+    "userId": "user_008",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_l_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "L",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738636800000,
+    "date": "2026-02-01",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_037",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738640400000,
+    "date": "2026-02-01",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_038",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "rebozo",
+      "resultsCount": 3
+    }
+  },
+  {
+    "ts": 1738644000000,
+    "date": "2026-02-01",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_039",
+    "userId": "user_009",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_004",
+      "variantId": "var_004_m_negro",
+      "productName": "Rebozo Chiapaneco",
+      "color": "Negro",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738647600000,
+    "date": "2026-02-01",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_040",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1738550400000,
+    "date": "2026-01-31",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_041",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "huipil",
+      "resultsCount": 6
+    }
+  },
+  {
+    "ts": 1738554000000,
+    "date": "2026-01-31",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_042",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1738557600000,
+    "date": "2026-01-31",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_043",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_005",
+      "variantId": "var_005_l_verde",
+      "productName": "Camisa Guayabera",
+      "color": "Verde",
+      "size": "L"
+    }
+  },
+  {
+    "ts": 1738561200000,
+    "date": "2026-01-31",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_044",
+    "userId": "user_010",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_m_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738464000000,
+    "date": "2026-01-30",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_045",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738467600000,
+    "date": "2026-01-30",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_046",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "falda típica",
+      "resultsCount": 5
+    }
+  },
+  {
+    "ts": 1738471200000,
+    "date": "2026-01-30",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_047",
+    "userId": "user_001",
+    "source": "FAVORITES",
+    "payload": {
+      "productId": "prod_005",
+      "variantId": "var_005_m_verde",
+      "productName": "Camisa Guayabera",
+      "color": "Verde",
+      "size": "M",
+      "action": "removed"
+    }
+  },
+  {
+    "ts": 1738474800000,
+    "date": "2026-01-30",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_048",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_004",
+      "productName": "Rebozo Chiapaneco"
+    }
+  },
+  {
+    "ts": 1738377600000,
+    "date": "2026-01-29",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_049",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "blusa tradicional",
+      "resultsCount": 8
+    }
+  },
+  {
+    "ts": 1738381200000,
+    "date": "2026-01-29",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_050",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738384800000,
+    "date": "2026-01-29",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_051",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_m_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "M"
+    }
+  },
+  {
+    "ts": 1738388400000,
+    "date": "2026-01-29",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_052",
+    "userId": "user_002",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_s_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "S",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738291200000,
+    "date": "2026-01-28",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_053",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1738294800000,
+    "date": "2026-01-28",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_054",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "vestido bordado",
+      "resultsCount": 12
+    }
+  },
+  {
+    "ts": 1738298400000,
+    "date": "2026-01-28",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_055",
+    "userId": "user_003",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_s_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "S",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1738302000000,
+    "date": "2026-01-28",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_056",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_005",
+      "productName": "Camisa Guayabera"
+    }
+  },
+  {
+    "ts": 1738204800000,
+    "date": "2026-01-27",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_057",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "camisa",
+      "resultsCount": 4
+    }
+  },
+  {
+    "ts": 1738208400000,
+    "date": "2026-01-27",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_058",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_005",
+      "productName": "Camisa Guayabera"
+    }
+  },
+  {
+    "ts": 1738212000000,
+    "date": "2026-01-27",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_059",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_004",
+      "variantId": "var_004_s_negro",
+      "productName": "Rebozo Chiapaneco",
+      "color": "Negro",
+      "size": "S"
+    }
+  },
+  {
+    "ts": 1738215600000,
+    "date": "2026-01-27",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_060",
+    "userId": "user_004",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_l_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "L",
+      "action": "removed"
+    }
+  },
+  {
+    "ts": 1738118400000,
+    "date": "2026-01-26",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_061",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1738122000000,
+    "date": "2026-01-26",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_062",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "rebozo",
+      "resultsCount": 3
+    }
+  },
+  {
+    "ts": 1738125600000,
+    "date": "2026-01-26",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_063",
+    "userId": "user_005",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_004",
+      "variantId": "var_004_l_negro",
+      "productName": "Rebozo Chiapaneco",
+      "color": "Negro",
+      "size": "L",
+      "action": "removed"
+    }
+  },
+  {
+    "ts": 1738129200000,
+    "date": "2026-01-26",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_064",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1738032000000,
+    "date": "2026-01-25",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_065",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "huipil",
+      "resultsCount": 6
+    }
+  },
+  {
+    "ts": 1738035600000,
+    "date": "2026-01-25",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_066",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1738039200000,
+    "date": "2026-01-25",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_067",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_m_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "M"
+    }
+  },
+  {
+    "ts": 1738042800000,
+    "date": "2026-01-25",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_068",
+    "userId": "user_006",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_m_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1737945600000,
+    "date": "2026-01-24",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_069",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_004",
+      "productName": "Rebozo Chiapaneco"
+    }
+  },
+  {
+    "ts": 1737949200000,
+    "date": "2026-01-24",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_070",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "falda típica",
+      "resultsCount": 5
+    }
+  },
+  {
+    "ts": 1737952800000,
+    "date": "2026-01-24",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_071",
+    "userId": "user_007",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_l_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "L",
+      "action": "removed"
+    }
+  },
+  {
+    "ts": 1737956400000,
+    "date": "2026-01-24",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_072",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1737859200000,
+    "date": "2026-01-23",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_073",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "blusa tradicional",
+      "resultsCount": 8
+    }
+  },
+  {
+    "ts": 1737862800000,
+    "date": "2026-01-23",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_074",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1737866400000,
+    "date": "2026-01-23",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_075",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_s_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "S"
+    }
+  },
+  {
+    "ts": 1737870000000,
+    "date": "2026-01-23",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_076",
+    "userId": "user_008",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_005",
+      "variantId": "var_005_l_verde",
+      "productName": "Camisa Guayabera",
+      "color": "Verde",
+      "size": "L",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1737772800000,
+    "date": "2026-01-22",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_077",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1737776400000,
+    "date": "2026-01-22",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_078",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "vestido bordado",
+      "resultsCount": 12
+    }
+  },
+  {
+    "ts": 1737780000000,
+    "date": "2026-01-22",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_079",
+    "userId": "user_009",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_m_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1737783600000,
+    "date": "2026-01-22",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_080",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1737686400000,
+    "date": "2026-01-21",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_081",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "camisa",
+      "resultsCount": 4
+    }
+  },
+  {
+    "ts": 1737690000000,
+    "date": "2026-01-21",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_082",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_005",
+      "productName": "Camisa Guayabera"
+    }
+  },
+  {
+    "ts": 1737693600000,
+    "date": "2026-01-21",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_083",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_l_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "L"
+    }
+  },
+  {
+    "ts": 1737697200000,
+    "date": "2026-01-21",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_084",
+    "userId": "user_010",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_004",
+      "variantId": "var_004_m_negro",
+      "productName": "Rebozo Chiapaneco",
+      "color": "Negro",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1737600000000,
+    "date": "2026-01-20",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_085",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1737603600000,
+    "date": "2026-01-20",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_086",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "rebozo",
+      "resultsCount": 3
+    }
+  },
+  {
+    "ts": 1737607200000,
+    "date": "2026-01-20",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_087",
+    "userId": "user_001",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_003",
+      "variantId": "var_003_s_azul",
+      "productName": "Vestido Largo Bordado",
+      "color": "Azul",
+      "size": "S",
+      "action": "removed"
+    }
+  },
+  {
+    "ts": 1737610800000,
+    "date": "2026-01-20",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_088",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_005",
+      "productName": "Camisa Guayabera"
+    }
+  },
+  {
+    "ts": 1737513600000,
+    "date": "2026-01-19",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_089",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "huipil",
+      "resultsCount": 6
+    }
+  },
+  {
+    "ts": 1737517200000,
+    "date": "2026-01-19",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_090",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_002",
+      "productName": "Huipil Oaxaqueño"
+    }
+  },
+  {
+    "ts": 1737520800000,
+    "date": "2026-01-19",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_091",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_005",
+      "variantId": "var_005_m_verde",
+      "productName": "Camisa Guayabera",
+      "color": "Verde",
+      "size": "M"
+    }
+  },
+  {
+    "ts": 1737524400000,
+    "date": "2026-01-19",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_092",
+    "userId": "user_002",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_001",
+      "variantId": "var_001_m_rojo",
+      "productName": "Blusa Bordada Flores",
+      "color": "Rojo",
+      "size": "M",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1737427200000,
+    "date": "2026-01-18",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_093",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_004",
+      "productName": "Rebozo Chiapaneco"
+    }
+  },
+  {
+    "ts": 1737430800000,
+    "date": "2026-01-18",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_094",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "falda típica",
+      "resultsCount": 5
+    }
+  },
+  {
+    "ts": 1737434400000,
+    "date": "2026-01-18",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_095",
+    "userId": "user_003",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_002",
+      "variantId": "var_002_l_blanco",
+      "productName": "Huipil Oaxaqueño",
+      "color": "Blanco",
+      "size": "L",
+      "action": "added"
+    }
+  },
+  {
+    "ts": 1737438000000,
+    "date": "2026-01-18",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_096",
+    "userId": "guest",
+    "source": "PLP",
+    "payload": {
+      "productId": "prod_003",
+      "productName": "Vestido Largo Bordado"
+    }
+  },
+  {
+    "ts": 1737340800000,
+    "date": "2026-01-17",
+    "type": "search_query",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_097",
+    "userId": "guest",
+    "source": "HEADER",
+    "payload": {
+      "query": "blusa tradicional",
+      "resultsCount": 8
+    }
+  },
+  {
+    "ts": 1737344400000,
+    "date": "2026-01-17",
+    "type": "product_card_click",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_098",
+    "userId": "guest",
+    "source": "SEARCH",
+    "payload": {
+      "productId": "prod_001",
+      "productName": "Blusa Bordada Flores"
+    }
+  },
+  {
+    "ts": 1737348000000,
+    "date": "2026-01-17",
+    "type": "variant_select",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_099",
+    "userId": "guest",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_004",
+      "variantId": "var_004_l_negro",
+      "productName": "Rebozo Chiapaneco",
+      "color": "Negro",
+      "size": "L"
+    }
+  },
+  {
+    "ts": 1737351600000,
+    "date": "2026-01-17",
+    "type": "favorite_toggle",
+    "tenantId": "las-plebes",
+    "sessionId": "ses_100",
+    "userId": "user_004",
+    "source": "PDP",
+    "payload": {
+      "productId": "prod_005",
+      "variantId": "var_005_s_verde",
+      "productName": "Camisa Guayabera",
+      "color": "Verde",
+      "size": "S",
+      "action": "added"
+    }
+  }
+]
