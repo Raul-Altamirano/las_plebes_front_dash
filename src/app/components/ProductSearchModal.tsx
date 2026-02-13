@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Package, ChevronRight, X } from 'lucide-react';
+import { Search, Package } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
