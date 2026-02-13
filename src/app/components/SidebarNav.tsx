@@ -14,7 +14,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
-import logo from '../../assets/react.svg';
+import logo from '../../assets/logo_las_plabes.jpg';
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: false, permission: undefined },

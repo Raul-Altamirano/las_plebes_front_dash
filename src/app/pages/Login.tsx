@@ -4,7 +4,7 @@ import { useAuth } from '../store/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Loader2, Mail, AlertCircle, Lock } from 'lucide-react';
-import logo from '../../assets/react.svg';
+import logo from '../../assets/logo_las_plabes.jpg';
 
 export default function Login() {
   const navigate = useNavigate();

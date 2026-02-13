@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 import { useAudit } from '../store/AuditContext';
-import logo from '../../assets/react.svg';
+import logo from '../../assets/logo_las_plabes.jpg';
 
 interface MobileDrawerNavProps {
   isOpen: boolean;
