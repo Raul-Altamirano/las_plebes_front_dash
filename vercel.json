@@ -4,7 +4,7 @@
   "framework": "vite",
   "headers": [
     {
-      "source": "/api/(.*)",
+
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "https://app.example" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
@@ -16,7 +16,7 @@
   "env": {
 
   },
-    "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
