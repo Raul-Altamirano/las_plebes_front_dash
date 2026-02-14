@@ -1,5 +1,11 @@
+import { apiFetch } from "./api/http";
+import { health } from "./api/identity";
+import { AuthSmokeTest } from "./dev/AuthSmokeTest";
+
+
+
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router';
+import {  Routes, Route, Navigate, useLocation } from 'react-router';
 import { ProductsProvider } from './app/store/ProductsContext';
 import { CategoryProvider } from './app/store/CategoryContext';
 import { PromotionsProvider } from './app/store/PromotionsContext';
@@ -47,6 +53,13 @@ function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
 
+
+   useEffect(() => {
+  health().then(console.log).catch(console.error);
+}, []);
+
+
+
   const getPageTitle = (pathname: string) => {
     if (pathname === '/dashboard') return 'Dashboard';
     if (pathname === '/products') return 'Productos';
@@ -73,9 +86,6 @@ function AppLayout() {
   };
 
   // Close mobile menu when route changes
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -259,9 +269,9 @@ function AppLayout() {
 }
 
 function App() {
+  
   return (
     <ErrorBoundary>
-      <BrowserRouter>
         <ToastProvider>
           <RolesProvider>
             <UsersProvider>
@@ -309,9 +319,18 @@ function App() {
             </UsersProvider>
           </RolesProvider>
         </ToastProvider>
-      </BrowserRouter>
     </ErrorBoundary>
   );
+}
+
+
+export function DevPing() {
+  useEffect(() => {
+    apiFetch("/health", { auth: false })
+      .then((r) => console.log("health:", r))
+      .catch((e) => console.error("health err:", e));
+  }, []);
+    return <div className="p-6">Ping...</div>;
 }
 
 export default App;

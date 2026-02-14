@@ -10,13 +10,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  resolve: {
-    alias: {
-      // Alias @ to the src directory
-      '@': path.resolve(__dirname, './src'),
+  server: {
+    proxy: {
+      "/identity": {
+        target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/identity/, ""),
+      },
     },
   },
-
-  // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
-  assetsInclude: ['**/*.svg', '**/*.csv'],
-})
+});

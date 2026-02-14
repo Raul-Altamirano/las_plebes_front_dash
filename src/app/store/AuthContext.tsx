@@ -1,157 +1,110 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { type User, type Permission } from '../types/permissions';
-import { useUsers } from './UsersContext';
-import { useRoles } from './RolesContext';
+// src/app/store/AuthContext.tsx
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import * as identity from "../../api/identity";
+import { setToken } from "../../api/http";
 
-interface AuthContextValue {
-  isAuthenticated: boolean;
-  currentUser: User | null;
-  currentUserId: string | null;
-  setCurrentUser: (userId: string) => void;
-  hasPermission: (permission: Permission) => boolean;
-  hasAnyPermission: (permissions: Permission[]) => boolean;
-  login: (email: string, password: string) => Promise<void>;
+type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  roleId: string;
+  roleName: string;
+  permissions: string[];
+  status: string;
+  lastLoginAt?: string;
+};
+
+type AuthContextValue = {
+  // compat + nuevo
+  user: AuthUser | null;
+  currentUser: AuthUser | null;
+
+  accessToken: string | null;
+
+  isAuthenticated: boolean; // compat con app vieja
+  isAuthed: boolean;        // por si lo usabas
+  ready: boolean;
+
+  login: (email: string, password: string, tenantId?: string) => Promise<void>;
   logout: () => void;
-}
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+  // compat con SidebarNav / RequirePermission
+  hasPermission: (permission: string) => boolean;
+  hasAnyPermission: (permissions: readonly string[]) => boolean;
+};
 
-const SESSION_KEY = 'session.currentUserId';
-const AUTH_KEY = 'session.isAuthenticated';
+const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Temporary storage for audit logging before AuditProvider is ready
-const PENDING_AUDIT_KEY = 'session.pendingAuditEvent';
+const LS_TOKEN = "accessToken";
+const LS_USER = "authUser";
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const usersContext = useUsers();
-  const rolesContext = useRoles();
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
-  // Cargar sesión del localStorage
-  const [currentUserId, setCurrentUserIdState] = useState<string | null>(() => {
-    try {
-      const stored = localStorage.getItem(SESSION_KEY);
-      const isAuth = localStorage.getItem(AUTH_KEY);
-      if (stored && isAuth === 'true') {
-        return stored;
-      }
-    } catch (error) {
-      console.error('Error loading session from localStorage:', error);
-    }
-    return null;
-  });
-
-  const isAuthenticated = currentUserId !== null;
-
-  // Persistir sesión cuando cambie
   useEffect(() => {
-    if (currentUserId) {
-      localStorage.setItem(SESSION_KEY, currentUserId);
-      localStorage.setItem(AUTH_KEY, 'true');
-    } else {
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(AUTH_KEY);
-    }
-  }, [currentUserId]);
+    const token = localStorage.getItem(LS_TOKEN);
+    const userRaw = localStorage.getItem(LS_USER);
 
-  // Resolver el usuario actual con permisos
-  const currentUser: User | null = React.useMemo(() => {
-    if (!currentUserId) {
-      return null;
-    }
+    const parsedUser = userRaw ? (JSON.parse(userRaw) as AuthUser) : null;
 
-    const systemUser = usersContext.getUserById(currentUserId);
-    if (!systemUser) {
-      // Fallback al primer super admin si no se encuentra
-      const fallbackUser = usersContext.users[0];
-      return {
-        id: fallbackUser?.id || 'user-1',
-        name: fallbackUser?.name || 'Admin User',
-        email: fallbackUser?.email || 'admin@example.com',
-        role: 'SUPER_ADMIN',
-        permissions: rolesContext.getRoleById('role-super-admin')?.permissions || [],
-      };
-    }
+    setAccessToken(token);
+    setUser(parsedUser);
+    setToken(token);
 
-    const systemRole = rolesContext.getRoleById(systemUser.roleId);
-    if (!systemRole) {
-      // Si no se encuentra el rol, dar permisos mínimos
-      return {
-        id: systemUser.id,
-        name: systemUser.name,
-        email: systemUser.email,
-        role: 'VIEWER',
-        permissions: [],
-      };
-    }
+    setReady(true);
+  }, []);
 
-    return {
-      id: systemUser.id,
-      name: systemUser.name,
-      email: systemUser.email,
-      role: systemRole.name as any, // Para compatibilidad con el tipo Role
-      permissions: systemRole.permissions,
-    };
-  }, [currentUserId, usersContext.users, rolesContext.roles, usersContext, rolesContext]);
-
-  const setCurrentUser = (userId: string) => {
-    setCurrentUserIdState(userId);
+  const hasPermission = (permission: string) => {
+    return !!user?.permissions?.includes(permission);
   };
 
-  const hasPermission = (permission: Permission): boolean => {
-    return currentUser?.permissions.includes(permission) || false;
+  const hasAnyPermission = (permissions: readonly string[]) => {
+    return permissions.some((p) => user?.permissions?.includes(p));
   };
 
-  const hasAnyPermission = (permissions: Permission[]): boolean => {
-    return permissions.some(p => currentUser?.permissions.includes(p)) || false;
-  };
+  const login = async (email: string, password: string, tenantId?: string) => {
+    const res = await identity.login({ email, password }, tenantId);
 
-  const login = async (email: string, password: string): Promise<void> => {
-    // Simular delay de red
-    await new Promise(resolve => setTimeout(resolve, 400));
+    setAccessToken(res.accessToken);
+    setUser(res.user);
 
-    // Validar formato de password (1-9)
-    const passwordRegex = /^[1-9]$/;
-    if (!passwordRegex.test(password)) {
-      throw new Error('INVALID_PASSWORD');
-    }
+    localStorage.setItem(LS_TOKEN, res.accessToken);
+    localStorage.setItem(LS_USER, JSON.stringify(res.user));
 
-    // Buscar usuario por email
-    const user = usersContext.getUserByEmail(email);
-    
-    if (!user) {
-      throw new Error('USER_NOT_FOUND');
-    }
-
-    if (user.status === 'SUSPENDED') {
-      throw new Error('USER_SUSPENDED');
-    }
-
-    // Si llegamos aquí, el login es exitoso
-    setCurrentUserIdState(user.id);
+    setToken(res.accessToken);
   };
 
   const logout = () => {
-    setCurrentUserIdState(null);
+    setAccessToken(null);
+    setUser(null);
+    localStorage.removeItem(LS_TOKEN);
+    localStorage.removeItem(LS_USER);
+    setToken(null);
   };
 
-  const value: AuthContextValue = {
-    isAuthenticated,
-    currentUser,
-    currentUserId,
-    setCurrentUser,
-    hasPermission,
-    hasAnyPermission,
-    login,
-    logout,
-  };
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      currentUser: user, // compat con código viejo
+      accessToken,
+      isAuthenticated: !!accessToken,
+      isAuthed: !!accessToken,
+      ready,
+      login,
+      logout,
+      hasPermission,
+      hasAnyPermission,
+    }),
+    [user, accessToken, ready]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
 }

@@ -1,17 +1,12 @@
-import { Navigate } from 'react-router';
-import { useAuth } from '../store/AuthContext';
+import React from "react";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../store/AuthContext";
 
-interface PublicOnlyProps {
-  children: React.ReactNode;
-}
+export function PublicOnly({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, ready } = useAuth();
 
-export function PublicOnly({ children }: PublicOnlyProps) {
-  const { isAuthenticated } = useAuth();
+  if (!ready) return null;
 
-  if (isAuthenticated) {
-    // Si ya está autenticado, redirigir al dashboard
-    return <Navigate to="/dashboard" replace />;
-  }
-
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
