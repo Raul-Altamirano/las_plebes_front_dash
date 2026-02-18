@@ -13,11 +13,12 @@ export default defineConfig({
 server: {
   proxy: {
     "/api/identity": {
-      target: "https://TU-LAMBDA-URL.on.aws",
+      target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
       changeOrigin: true,
-      rewrite: (path) => path.replace(/^\/api\/identity/, ""),
+      rewrite: (p) => p.replace(/^\/api\/identity/, ""),
     },
   },
 },
+
 
 });
