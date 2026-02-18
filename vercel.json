@@ -1,19 +1,8 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite",
-    "routes": [
-    {
-
-      "headers": {
-        "Access-Control-Allow-Origin": "*"
-      }
-    }
-  ],
-  "env": {
-
-  },
-    "rewrites": [
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
