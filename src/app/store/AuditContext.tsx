@@ -85,6 +85,11 @@ export function AuditProvider({ children }: { children: ReactNode }) {
       console.warn('Cannot log audit event: no current user');
       return;
     }
+const roleName =
+  (currentUser as any).roleName ??
+  (currentUser as any).role?.name ??     // por compat con viejo formato
+  (currentUser as any).roleId ??
+  "—";
 
     const newEvent: AuditEvent = {
       id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -92,8 +97,7 @@ export function AuditProvider({ children }: { children: ReactNode }) {
       actor: {
         id: currentUser.id,
         name: currentUser.name,
-        roleName: currentUser.role,
-      },
+roleName      },
       action: params.action,
       entity: params.entity,
       changes: params.changes,

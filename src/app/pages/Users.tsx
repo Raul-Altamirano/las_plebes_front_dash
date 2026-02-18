@@ -30,7 +30,9 @@ interface UserFormData {
 export function Users() {
   const { users, getUserById, createUser, updateUser, suspendUser, activateUser, isEmailAvailable, canDeleteSuperAdmin } = useUsers();
   const { roles, getRoleById } = useRoles();
-  const { currentUser, hasPermission } = useAuth();
+  // const { currentUser, hasPermission } = useAuth();
+  const { currentUser, ready, isAuthenticated, hasPermission } = useAuth();
+
   const { auditLog } = useAudit();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -84,6 +86,12 @@ export function Users() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!ready) return; // o muestra loader
+if (!isAuthenticated || !currentUser) {
+  toast.error("Sesión no lista. Vuelve a iniciar sesión.");
+  return;
+}
+
     if (!formData.name.trim()) {
       toast.error('El nombre es requerido');
       return;
@@ -120,21 +128,26 @@ export function Users() {
       });
 
       const role = getRoleById(formData.roleId);
-      auditLog({
-        action: 'USER_CREATED',
-        entityType: 'user',
-        entityId: newUser.id,
-        entityName: newUser.name,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userRole: currentUser.role,
-        changes: [
-          { field: 'email', from: null, to: newUser.email },
-          { field: 'roleId', from: null, to: newUser.roleId },
-          { field: 'roleName', from: null, to: role?.name || 'Unknown' },
-          { field: 'status', from: null, to: newUser.status },
-        ],
-      });
+auditLog({
+  action: "USER_CREATED",
+  entity: {
+    type: "user",
+    id: newUser.id,
+    label: newUser.name,
+  },
+  changes: [
+    { field: "email", from: null, to: newUser.email },
+    { field: "roleId", from: null, to: newUser.roleId },
+    { field: "roleName", from: null, to: role?.name || "Unknown" },
+    { field: "status", from: null, to: newUser.status },
+  ],
+  metadata: {
+    actorId: currentUser.id,
+    actorName: currentUser.name,
+    actorRoleName: currentUser.roleName ?? currentUser.roleId ?? "—",
+  },
+});
+
 
       toast.success(`Usuario ${newUser.name} creado exitosamente`);
     } else if (editingUserId) {
@@ -171,15 +184,26 @@ export function Users() {
         status: formData.status,
       });
 
+      const oldRole = getRoleById(oldUser.roleId);
+
       auditLog({
         action: 'USER_UPDATED',
-        entityType: 'user',
-        entityId: editingUserId,
-        entityName: formData.name,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userRole: currentUser.role,
-        changes,
+        entity: {
+    type: "user",
+    id: editingUserId,
+    label: oldUser.name,
+  },
+  changes: [
+    { field: "email", from: oldUser.email, to: formData.email },
+    { field: "roleId", from: oldUser.roleId, to: formData.roleId },
+    { field: "roleName", from: oldRole?.name || 'Unknown', to: getRoleById(formData.roleId)?.name || "Unknown" },
+    { field: "status", from: oldUser.status, to: formData.status },
+  ],
+  metadata: {
+    actorId: currentUser.id,
+    actorName: currentUser.name,
+    actorRoleName: currentUser.roleName ?? currentUser.roleId ?? "—",
+  },
       });
 
       toast.success(`Usuario ${formData.name} actualizado exitosamente`);

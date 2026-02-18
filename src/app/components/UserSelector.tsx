@@ -23,22 +23,24 @@ export function UserSelector() {
     
     const newUser = users.find(u => u.id === userId);
     const newRole = newUser ? getRoleById(newUser.roleId) : null;
-    const previousRole = getRoleById(users.find(u => u.id === previousUser.id)?.roleId || '');
+    const previousRole = previousUser ? getRoleById(users.find(u => u.id === previousUser.id)?.roleId || '') : null;
     
     // Registrar el cambio en auditoría
-    auditLog({
-      action: 'CURRENT_USER_SWITCHED',
-      entity: {
-        type: 'user',
-        id: userId,
-        label: newUser?.name || 'Unknown',
-      },
-      changes: [
-        { field: 'userId', from: previousUser.id, to: userId },
-        { field: 'userName', from: previousUser.name, to: newUser?.name || 'Unknown' },
-        { field: 'role', from: previousRole?.name || 'Unknown', to: newRole?.name || 'Unknown' },
-      ],
-    });
+    if (previousUser) {
+      auditLog({
+        action: 'CURRENT_USER_SWITCHED',
+        entity: {
+          type: 'user',
+          id: userId,
+          label: newUser?.name || 'Unknown',
+        },
+        changes: [
+          { field: 'userId', from: previousUser.id, to: userId },
+          { field: 'userName', from: previousUser.name, to: newUser?.name || 'Unknown' },
+          { field: 'role', from: previousRole?.name || 'Unknown', to: newRole?.name || 'Unknown' },
+        ],
+      });
+    }
   };
 
   const activeUsers = users.filter(u => u.status === 'ACTIVE');
@@ -50,8 +52,8 @@ export function UserSelector() {
       <div className="flex items-center gap-2 text-sm text-gray-600">
         <User className="w-4 h-4 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-gray-900 truncate">{currentUser.name}</div>
-          <div className="text-xs text-gray-500 truncate">{currentUser.email}</div>
+<div className="font-medium">{currentUserData?.name ?? currentUser?.name ?? "—"}</div>
+          <div className="text-xs text-gray-500 truncate">{currentUserData?.email ?? currentUser?.email ?? "—"}</div>
         </div>
       </div>
       
