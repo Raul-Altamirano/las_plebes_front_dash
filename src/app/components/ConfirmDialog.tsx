@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   isLoading?: boolean;
   children?: React.ReactNode;
+    variant?: "default" | "destructive";
+
 }
 
 export function ConfirmDialog({

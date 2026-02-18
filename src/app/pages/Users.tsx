@@ -4,6 +4,7 @@ import { useUsers } from '../store/UsersContext';
 import { useRoles } from '../store/RolesContext';
 import { useAuth } from '../store/AuthContext';
 import { useAudit } from '../store/AuditContext';
+import { UserStatusBadge } from "../components/UserStatusBadge";
 import { type SystemUser, USER_STATUS_LABELS } from '../types/user';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/Badge';
@@ -231,16 +232,26 @@ auditLog({
     const user = getUserById(confirmDialog.userId);
     if (!user) return;
 
+    if (!currentUser) {
+      toast.error('Sesión no lista. Vuelve a iniciar sesión.');
+      return;
+    }
+
     if (confirmDialog.action === 'suspend') {
       suspendUser(confirmDialog.userId);
       auditLog({
         action: 'USER_SUSPENDED',
-        entityType: 'user',
-        entityId: confirmDialog.userId,
-        entityName: user.name,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userRole: currentUser.role,
+          entity: {
+    type: "user",
+    id: user.id,
+    label: user.name,
+  },
+        
+  metadata: {
+    actorId: currentUser.id,
+    actorName: currentUser.name,
+    actorRoleName: currentUser.roleName ?? currentUser.roleId ?? "—",
+  },
         changes: [{ field: 'status', from: 'ACTIVE', to: 'SUSPENDED' }],
       });
       toast.success(`Usuario ${user.name} suspendido`);
@@ -248,12 +259,16 @@ auditLog({
       activateUser(confirmDialog.userId);
       auditLog({
         action: 'USER_ACTIVATED',
-        entityType: 'user',
-        entityId: confirmDialog.userId,
-        entityName: user.name,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        userRole: currentUser.role,
+          entity: {
+    type: "user",
+    id: user.id,
+    label: user.name,
+  },
+        metadata: {
+          actorId: currentUser.id,
+          actorName: currentUser.name,
+          actorRoleName: currentUser.roleName ?? currentUser.roleId ?? "—",
+        },
         changes: [{ field: 'status', from: 'SUSPENDED', to: 'ACTIVE' }],
       });
       toast.success(`Usuario ${user.name} activado`);
@@ -295,9 +310,7 @@ auditLog({
       key: 'status',
       label: 'Estado',
       render: (user: SystemUser) => (
-        <Badge variant={user.status === 'ACTIVE' ? 'success' : 'default'}>
-          {user.status === 'ACTIVE' ? 'Activo' : 'Suspendido'}
-        </Badge>
+<UserStatusBadge status={user.status as any} />
       ),
     },
     {
