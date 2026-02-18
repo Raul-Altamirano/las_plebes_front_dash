@@ -1,52 +1,75 @@
-export const config = { runtime: "nodejs" };
+// /api/identity/[...path].ts
+export const config = {
+  runtime: "nodejs",
+};
 
-const UPSTREAM = process.env.IDENTITY_URL!;
-// ejemplo: https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws
+function corsHeaders(origin?: string) {
+  // Permite Vercel prod + previews
+  const o = origin || "*";
+  return {
+    "Access-Control-Allow-Origin": o,
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
+}
 
 export default async function handler(req: any, res: any) {
+  const origin = req.headers?.origin as string | undefined;
+
   // Preflight
   if (req.method === "OPTIONS") {
-    res.status(204);
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-Id");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    return res.end();
+    const h = corsHeaders(origin);
+    Object.entries(h).forEach(([k, v]) => res.setHeader(k, v));
+    return res.status(204).end();
   }
 
-  const path = req.query?.path ? `/${req.query.path.join("/")}` : "";
-  const qsIndex = req.url?.indexOf("?") ?? -1;
-  const qs = qsIndex >= 0 ? req.url.slice(qsIndex) : "";
-  const url = `${UPSTREAM.replace(/\/$/, "")}${path}${qs}`;
-
-  const headers: Record<string, string> = {};
-  for (const [k, v] of Object.entries(req.headers)) {
-    if (typeof v === "string") headers[k] = v;
+  const base = process.env.IDENTITY_UPSTREAM_BASE_URL; // ej: https://xxxxx.lambda-url.us-east-1.on.aws
+  if (!base) {
+    return res.status(500).json({ message: "Missing IDENTITY_UPSTREAM_BASE_URL env var" });
   }
-  delete headers.host;
 
-  const body =
-    req.method === "GET" || req.method === "HEAD"
-      ? undefined
-      : JSON.stringify(req.body ?? {});
+  const pathParts = req.query?.path;
+  const restPath = Array.isArray(pathParts) ? pathParts.join("/") : String(pathParts || "");
+  const url = `${base.replace(/\/$/, "")}/${restPath}`;
 
-  const upstreamRes = await fetch(url, {
+  // Body raw
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve) => {
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => resolve());
+  });
+  const body = chunks.length ? Buffer.concat(chunks) : undefined;
+
+  // Forward headers (limpio lo que estorba)
+  const fwdHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(req.headers || {})) {
+    if (!v) continue;
+    const key = k.toLowerCase();
+    if (key === "host" || key === "content-length") continue;
+    fwdHeaders[k] = Array.isArray(v) ? v.join(",") : String(v);
+  }
+
+  // OJO: si tú dependes del tenant, asegúrate de mandar X-Tenant-Id desde FE
+  // aquí solo lo “pasa” si viene.
+
+  const upstream = await fetch(url, {
     method: req.method,
-    headers,
-    body,
+    headers: fwdHeaders,
+    body: body as any,
   });
 
-  const text = await upstreamRes.text();
+  // Set CORS
+  const h = corsHeaders(origin);
+  Object.entries(h).forEach(([k, v]) => res.setHeader(k, v));
 
-  res.status(upstreamRes.status);
-  upstreamRes.headers.forEach((value, key) => {
-    if (!["content-encoding", "transfer-encoding", "connection"].includes(key.toLowerCase())) {
-      res.setHeader(key, value);
-    }
-  });
+  // Copy status + content-type
+  res.statusCode = upstream.status;
+  const ct = upstream.headers.get("content-type");
+  if (ct) res.setHeader("content-type", ct);
 
-  // Opcional, no estorba
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-
-  return res.send(text);
+  // Copy upstream response body
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  return res.end(buf);
 }
