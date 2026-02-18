@@ -1,5 +1,9 @@
 {
   "routes": [
+    {
+      "src": "/api/identity/(.*)",
+      "dest": "/api/identity/[...path].ts"
+    },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

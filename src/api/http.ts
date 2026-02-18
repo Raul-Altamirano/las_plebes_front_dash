@@ -14,7 +14,7 @@ export type ApiError = {
   };
 };
 
-const RAW_BASE = (import.meta.env.VITE_IDENTITY_BASE_URL as string | undefined) ?? "/identity";
+const RAW_BASE = (import.meta.env.VITE_IDENTITY_BASE_URL as string | undefined) ?? "/api/identity";
 const BASE = RAW_BASE.replace(/\/$/, ""); // "" | "/identity" | "https://..."
 
 const DEFAULT_TENANT = (import.meta.env.VITE_TENANT_ID as string | undefined) ?? "lasplebes";

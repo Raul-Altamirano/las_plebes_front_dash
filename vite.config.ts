@@ -12,10 +12,10 @@ export default defineConfig({
   ],
 server: {
   proxy: {
-    "/api/identity": {
+    "/identity": {  // ← era /api/identity
       target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
       changeOrigin: true,
-      rewrite: (p) => p.replace(/^\/api\/identity/, ""),
+      rewrite: (p) => p.replace(/^\/identity/, ""),
     },
   },
 },
