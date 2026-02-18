@@ -10,14 +10,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  server: {
-    proxy: {
-      "/identity": {
-        target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path) => path.replace(/^\/identity/, ""),
-      },
+server: {
+  proxy: {
+    "/api/identity": {
+      target: "https://TU-LAMBDA-URL.on.aws",
+      changeOrigin: true,
+      rewrite: (path) => path.replace(/^\/api\/identity/, ""),
     },
   },
+},
+
 });
