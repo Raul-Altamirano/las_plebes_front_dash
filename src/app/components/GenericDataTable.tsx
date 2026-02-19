@@ -8,11 +8,13 @@ export interface Column<T> {
 
 export interface Action<T> {
   label: string | ((item: T) => string);
-  icon: React.ComponentType<{ className?: string }> | ((item: T) => React.ComponentType<{ className?: string }>);
+  icon: React.ComponentType<{ className?: string }>;
+  getIcon?: (item: T) => React.ComponentType<{ className?: string }>;
   onClick: (item: T) => void;
   variant?: 'default' | 'destructive' | ((item: T) => 'default' | 'destructive');
   hidden?: boolean | ((item: T) => boolean);
 }
+
 
 interface GenericDataTableProps<T> {
   data: T[];
@@ -63,7 +65,7 @@ export function GenericDataTable<T>({ data, columns, actions = [], getKey }: Gen
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2">
                       {actions.map((action, idx) => {
-                        const Icon = typeof action.icon === 'function' ? action.icon(item) : action.icon;
+const Icon = action.getIcon ? action.getIcon(item) : action.icon;
                         const label = typeof action.label === 'function' ? action.label(item) : action.label;
                         const variant = typeof action.variant === 'function' ? action.variant(item) : action.variant || 'default';
                         const hidden = typeof action.hidden === 'function' ? action.hidden(item) : action.hidden || false;

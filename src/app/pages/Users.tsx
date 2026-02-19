@@ -7,8 +7,7 @@ import { useAudit } from '../store/AuditContext';
 import { UserStatusBadge } from "../components/UserStatusBadge";
 import { type SystemUser, USER_STATUS_LABELS } from '../types/user';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/Badge';
-import { GenericDataTable } from '../components/GenericDataTable';
+import { GenericDataTable, type Action } from '../components/GenericDataTable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -17,7 +16,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { toast } from 'sonner';
 import { exportToCSV, formatDateForCSV } from '../utils/csvExport';
-import { Card } from '../components/ui/card';
 
 type FormMode = 'create' | 'edit';
 
@@ -214,6 +212,7 @@ auditLog({
   };
 
   const handleSuspendActivate = (userId: string, action: 'suspend' | 'activate') => {
+    console.log('handleSuspend/Activate', { userId, action });
     const user = getUserById(userId);
     if (!user) return;
 
@@ -320,22 +319,25 @@ auditLog({
     },
   ];
 
-  const actions = canManageUsers
-    ? [
-        {
-          label: 'Editar',
-          icon: Edit,
-          onClick: (user: SystemUser) => handleOpenEdit(user),
-        },
-        {
-          label: (user: SystemUser) => (user.status === 'ACTIVE' ? 'Suspender' : 'Activar'),
-          icon: (user: SystemUser) => (user.status === 'ACTIVE' ? Ban : CheckCircle),
-          onClick: (user: SystemUser) =>
-            handleSuspendActivate(user.id, user.status === 'ACTIVE' ? 'suspend' : 'activate'),
-          variant: (user: SystemUser) => (user.status === 'ACTIVE' ? 'destructive' : 'default'),
-        },
-      ]
-    : [];
+const actions: Action<SystemUser>[] = canManageUsers
+  ? [
+      {
+        label: "Editar",
+        icon: Edit,
+        onClick: (user) => handleOpenEdit(user),
+      },
+      {
+        label: (user) => (user.status === "ACTIVE" ? "Suspender" : "Activar"),
+        icon: Ban, // ícono default (no importa mucho)
+        getIcon: (user) => (user.status === "ACTIVE" ? Ban : CheckCircle),
+        onClick: (user) =>
+          handleSuspendActivate(user.id, user.status === "ACTIVE" ? "suspend" : "activate"),
+        variant: (user) => (user.status === "ACTIVE" ? "destructive" : "default"),
+      },
+    ]
+  : [];
+
+
 
   const exportUsersToCSV = () => {
     setIsExporting(true);

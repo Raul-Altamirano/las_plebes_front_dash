@@ -1,72 +1,57 @@
-import { X, Loader2 } from 'lucide-react';
+// src/app/components/ConfirmDialog.tsx
+import React from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Button } from "./ui/button";
 
-interface ConfirmDialogProps {
+export type ConfirmDialogProps = {
   isOpen: boolean;
   title: string;
   message: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
+  confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
-  isLoading?: boolean;
-  children?: React.ReactNode;
-    variant?: "default" | "destructive";
 
-}
+  variant?: "default" | "destructive";
+};
 
 export function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirmar',
-  cancelLabel = 'Cancelar',
+  confirmLabel,
   onConfirm,
   onCancel,
-  isLoading = false,
-  children
+  variant = "default",
 }: ConfirmDialogProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <button
-            onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600"
-            disabled={isLoading}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        // si el usuario cierra con ESC o click afuera
+        if (!open) onCancel();
+      }}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{message}</DialogDescription>
+        </DialogHeader>
 
-        {/* Body */}
-        <div className="p-6">
-          <p className="text-sm text-gray-600">{message}</p>
-          {children}
-        </div>
+        <div className="flex gap-2 pt-4">
+          <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
+            Cancelar
+          </Button>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isLoading}
-          >
-            {cancelLabel}
-          </button>
-          <button
+          <Button
+            type="button"
+            variant={variant === "destructive" ? "destructive" : "default"}
+            className="flex-1"
             onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            disabled={isLoading}
           >
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
             {confirmLabel}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
