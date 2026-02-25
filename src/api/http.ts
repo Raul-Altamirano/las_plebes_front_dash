@@ -65,6 +65,11 @@ export async function apiFetch<T = any>(path: string, opts: ApiFetchOptions = {}
 
   const token = getToken();
 
+if (shouldDebug(opts)) {
+  console.log("Token present?", Boolean(token), "len:", token?.length ?? 0);
+  console.log("Auth flag:", auth);
+}
+
   const tenantId =
     opts.tenant ??
     localStorage.getItem(LS_TENANT) ??
@@ -81,6 +86,11 @@ export async function apiFetch<T = any>(path: string, opts: ApiFetchOptions = {}
 
   // ✅ Auth header (cuando aplica)
   if (auth && token) headers.set("Authorization", `Bearer ${token}`);
+
+      console.log("URL:", url);
+    console.log("Headers:", Object.fromEntries(headers.entries()));
+
+    console.groupEnd();
 
   if (shouldDebug(opts)) {
     console.log(`API → ${method} ${url} ${opts.label ? `[${opts.label}]` : ""}`, {

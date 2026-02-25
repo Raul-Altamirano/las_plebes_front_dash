@@ -269,56 +269,53 @@ function AppLayout() {
 }
 
 function App() {
-  
   return (
     <ErrorBoundary>
+      <AuthProvider>
         <ToastProvider>
           <RolesProvider>
             <UsersProvider>
-              <AuthProvider>
-                <Routes>
-                  {/* Ruta pública - Login */}
-                  <Route 
-                    path="/login" 
-                    element={
-                      <PublicOnly>
-                        <Login />
-                      </PublicOnly>
-                    } 
-                  />
-                  
-                  {/* Rutas protegidas */}
-                  <Route
-                    path="/*"
-                    element={
-                      <RequireAuth>
-                        <AuditProvider>
-                          <ProductsProvider>
-                            <CategoryProvider>
-                              <PromotionsProvider>
-                                <CouponsProvider>
-                                  <CustomersProvider>
-                                    <CoverageProvider>
-                                      <OrdersProvider>
-                                        <RMAProvider>
-                                          <AppLayout />
-                                        </RMAProvider>
-                                      </OrdersProvider>
-                                    </CoverageProvider>
-                                  </CustomersProvider>
-                                </CouponsProvider>
-                              </PromotionsProvider>
-                            </CategoryProvider>
-                          </ProductsProvider>
-                        </AuditProvider>
-                      </RequireAuth>
-                    }
-                  />
-                </Routes>
-              </AuthProvider>
+              <Routes>
+                <Route
+                  path="/login"
+                  element={
+                    <PublicOnly>
+                      <Login />
+                    </PublicOnly>
+                  }
+                />
+
+                <Route
+                  path="/*"
+                  element={
+                    <RequireAuth>
+                      <AuditProvider>
+                        <ProductsProvider>
+                          <CategoryProvider>
+                            <PromotionsProvider>
+                              <CouponsProvider>
+                                <CustomersProvider>
+                                  <CoverageProvider>
+                                    <OrdersProvider>
+                                      <RMAProvider>
+                                        <AppLayout />
+                                      </RMAProvider>
+                                    </OrdersProvider>
+                                  </CoverageProvider>
+                                </CustomersProvider>
+                              </CouponsProvider>
+                            </PromotionsProvider>
+                          </CategoryProvider>
+                        </ProductsProvider>
+                      </AuditProvider>
+                    </RequireAuth>
+                  }
+                />
+              </Routes>
             </UsersProvider>
           </RolesProvider>
         </ToastProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

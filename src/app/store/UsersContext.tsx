@@ -1,13 +1,25 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-// import { type UserStatus } from '../types/user';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { toast } from "sonner";
 import { type SystemUser } from "../types/user";
+
+import { useAuth } from "../store/AuthContext";
+
+import {
+  listUsers,
+  listRoles,
+  createUser as apiCreateUser,
+  updateUser as apiUpdateUser,
+  updateUserStatus as apiUpdateUserStatus,
+  enrichUsersWithRoleName,
+  type UserStatus,
+} from "../../api/identity";
 
 interface UsersContextValue {
   users: SystemUser[];
   getUserById: (id: string) => SystemUser | undefined;
   getUserByEmail: (email: string) => SystemUser | undefined;
-  createUser: (user: Omit<SystemUser, 'id' | 'createdAt' | 'updatedAt'>) => SystemUser;
-  updateUser: (id: string, updates: Partial<Omit<SystemUser, 'id' | 'createdAt'>>) => void;
+  createUser: (user: Omit<SystemUser, "id" | "createdAt" | "updatedAt"> & { password?: string }) => SystemUser;
+  updateUser: (id: string, updates: Partial<Omit<SystemUser, "id" | "createdAt">>) => void;
   suspendUser: (id: string) => void;
   activateUser: (id: string) => void;
   isEmailAvailable: (email: string, excludeId?: string) => boolean;
@@ -16,170 +28,137 @@ interface UsersContextValue {
 
 const UsersContext = createContext<UsersContextValue | undefined>(undefined);
 
-const STORAGE_KEY = 'ecommerce_admin_users';
-
-// Seed inicial de usuarios
-const SEED_USERS: SystemUser[] = [
-  {
-    id: 'user-super-admin-1',
-    name: 'Super Admin',
-    email: 'sadmin@local.dev',
-    roleId: 'role-super-admin',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'user-admin-1',
-    name: 'Administrador',
-    email: 'admin@local.dev',
-    roleId: 'role-admin',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'user-catalog-1',
-    name: 'Juan Catálogo',
-    email: 'catalog@example.com',
-    roleId: 'role-catalog',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'user-ops-1',
-    name: 'María Operaciones',
-    email: 'ops@example.com',
-    roleId: 'role-ops',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'user-viewer-1',
-    name: 'Ana Viewer',
-    email: 'viewer@example.com',
-    roleId: 'role-viewer',
-    status: 'ACTIVE',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+const norm = (s: string) => String(s || "").trim().toLowerCase();
 
 export function UsersProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<SystemUser[]>(() => {
+  const { isAuthenticated } = useAuth();
+
+  const [users, setUsers] = useState<SystemUser[]>([]);
+
+  const refresh = async () => {
+    if (!isAuthenticated) return;
+
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        let parsedUsers = JSON.parse(stored) as SystemUser[];
-        let needsUpdate = false;
-        
-        // Migración 1: actualizar email del Super Admin si tiene el email antiguo
-        const superAdminIndex = parsedUsers.findIndex(
-          u => u.id === 'user-super-admin-1' && u.email === 'admin@example.com'
-        );
-        
-        if (superAdminIndex !== -1) {
-          parsedUsers[superAdminIndex] = {
-            ...parsedUsers[superAdminIndex],
-            email: 'sadmin@local.dev',
-            updatedAt: new Date().toISOString(),
-          };
-          needsUpdate = true;
-          console.log('✅ Migración 1: email de Super Admin actualizado a sadmin@local.dev');
-        }
-        
-        // Migración 2: agregar usuario Admin si no existe
-        const adminExists = parsedUsers.some(u => u.id === 'user-admin-1');
-        if (!adminExists) {
-          parsedUsers.push({
-            id: 'user-admin-1',
-            name: 'Administrador',
-            email: 'admin@local.dev',
-            roleId: 'role-admin',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-          needsUpdate = true;
-          console.log('✅ Migración 2: usuario Administrador agregado (admin@local.dev)');
-        }
-        
-        // Persistir migraciones
-        if (needsUpdate) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedUsers));
-        }
-        
-        return parsedUsers;
+      const uRes = await listUsers();
+      const raw = (uRes?.items ?? []) as any as SystemUser[];
+
+      // enriquecer roleName desde roles para UI
+      try {
+        const rRes = await listRoles();
+        const enriched = enrichUsersWithRoleName(raw as any, (rRes?.items ?? []) as any);
+        setUsers(enriched as any);
+      } catch {
+        setUsers(raw);
       }
-    } catch (error) {
-      console.error('Error loading users from localStorage:', error);
+    } catch (e) {
+      toast.error("No se pudieron cargar usuarios");
+      // console.error(e);
     }
-    // Si no hay datos, usar seed
-    return SEED_USERS;
-  });
+  };
 
-  // Persistir en localStorage cuando cambie
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-  }, [users]);
+    if (isAuthenticated) void refresh();
+    else setUsers([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
-  const getUserById = (id: string): SystemUser | undefined => {
-    return users.find(u => u.id === id);
+  const getUserById = (id: string) => users.find((u) => u.id === id);
+
+  const getUserByEmail = (email: string) => users.find((u) => norm(u.email) === norm(email));
+
+  const isEmailAvailable = (email: string, excludeId?: string) => {
+    const e = norm(email);
+    return !users.some((u) => norm(u.email) === e && u.id !== excludeId);
   };
 
-  const getUserByEmail = (email: string): SystemUser | undefined => {
-    return users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  const canDeleteSuperAdmin = (userId: string, roleId: string) => {
+    if (roleId !== "role-super-admin") return true;
+    const activeSupers = users.filter((u) => u.roleId === "role-super-admin" && u.status === "ACTIVE");
+    return activeSupers.length > 1 || activeSupers[0]?.id !== userId;
   };
 
-  const isEmailAvailable = (email: string, excludeId?: string): boolean => {
-    return !users.some(u => u.email.toLowerCase() === email.toLowerCase() && u.id !== excludeId);
-  };
+  const createUser = (data: Omit<SystemUser, "id" | "createdAt" | "updatedAt"> & { password?: string }): SystemUser => {
+    const tempId = `tmp-user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const now = new Date().toISOString();
 
-  const createUser = (data: Omit<SystemUser, 'id' | 'createdAt' | 'updatedAt'>): SystemUser => {
     const newUser: SystemUser = {
-      ...data,
-      id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      ...(data as any),
+      id: tempId,
+      createdAt: now,
+      updatedAt: now,
     };
-    setUsers(prev => [...prev, newUser]);
+
+    setUsers((prev) => [...prev, newUser]);
+
+    (async () => {
+      try {
+        const res = await apiCreateUser(data as any);
+
+        // reemplaza id temporal por id real
+        setUsers((prev) =>
+          prev.map((u) => (u.id === tempId ? ({ ...u, id: res.id, updatedAt: new Date().toISOString() } as any) : u))
+        );
+
+        await refresh();
+      } catch (e: any) {
+        setUsers((prev) => prev.filter((u) => u.id !== tempId));
+        toast.error(e?.message || "Error creando usuario");
+        await refresh();
+      }
+    })();
+
     return newUser;
   };
 
-  const updateUser = (id: string, updates: Partial<Omit<SystemUser, 'id' | 'createdAt'>>) => {
-    setUsers(prev =>
-      prev.map(user =>
-        user.id === id
-          ? { ...user, ...updates, updatedAt: new Date().toISOString() }
-          : user
-      )
+  const updateUser = (id: string, updates: Partial<Omit<SystemUser, "id" | "createdAt">>) => {
+    // optimistic
+    setUsers((prev) =>
+      prev.map((user) => (user.id === id ? ({ ...user, ...updates, updatedAt: new Date().toISOString() } as any) : user))
     );
+
+    (async () => {
+      try {
+        await apiUpdateUser(id, updates as any);
+        await refresh();
+      } catch (e: any) {
+        toast.error(e?.message || "Error actualizando usuario");
+        await refresh();
+      }
+    })();
   };
 
   const suspendUser = (id: string) => {
-    updateUser(id, { status: 'SUSPENDED' });
+    const u = getUserById(id);
+    if (u && u.roleId === "role-super-admin" && !canDeleteSuperAdmin(u.id, u.roleId)) {
+      toast.error("No puedes suspender al último Super Admin activo");
+      return;
+    }
+
+    setUsers((prev) => prev.map((x) => (x.id === id ? ({ ...x, status: "SUSPENDED" } as any) : x)));
+
+    (async () => {
+      try {
+        await apiUpdateUserStatus(id, "SUSPENDED" as UserStatus);
+        await refresh();
+      } catch (e: any) {
+        toast.error(e?.message || "Error suspendiendo usuario");
+        await refresh();
+      }
+    })();
   };
 
   const activateUser = (id: string) => {
-    updateUser(id, { status: 'ACTIVE' });
-  };
+    setUsers((prev) => prev.map((x) => (x.id === id ? ({ ...x, status: "ACTIVE" } as any) : x)));
 
-  // Verifica si es seguro suspender/eliminar un usuario SUPER_ADMIN
-  const canDeleteSuperAdmin = (userId: string, roleId: string): boolean => {
-    // Si el roleId no es super-admin, siempre se puede
-    if (roleId !== 'role-super-admin') {
-      return true;
-    }
-
-    // Contar cuántos super admins activos hay
-    const activeSuperAdmins = users.filter(
-      u => u.roleId === 'role-super-admin' && u.status === 'ACTIVE'
-    );
-
-    // Si solo hay uno y es el mismo usuario, no se puede
-    return activeSuperAdmins.length > 1 || activeSuperAdmins[0]?.id !== userId;
+    (async () => {
+      try {
+        await apiUpdateUserStatus(id, "ACTIVE" as UserStatus);
+        await refresh();
+      } catch (e: any) {
+        toast.error(e?.message || "Error activando usuario");
+        await refresh();
+      }
+    })();
   };
 
   const value: UsersContextValue = {
@@ -200,7 +179,7 @@ export function UsersProvider({ children }: { children: ReactNode }) {
 export function useUsers() {
   const context = useContext(UsersContext);
   if (context === undefined) {
-    throw new Error('useUsers must be used within a UsersProvider');
+    throw new Error("useUsers must be used within a UsersProvider");
   }
   return context;
 }

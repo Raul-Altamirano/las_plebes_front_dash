@@ -254,9 +254,30 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
 
 export function useProductsStore() {
   const context = useContext(ProductsContext);
+
   if (context === null) {
+    // ✅ En DEV: evita que HMR mate la app por un micro-momento sin provider
+    if (import.meta.env.DEV) {
+      return {
+        products: [],
+        createProduct: () => {},
+        updateProduct: () => {},
+        deleteProduct: () => {},
+        archiveProduct: () => {},
+        restoreProduct: () => {},
+        bulkUpdateStatus: () => {},
+        publishProduct: async () => {},
+        hideProduct: async () => {},
+        getById: () => undefined,
+        isSkuAvailable: () => true,
+        adjustStock: () => {},
+      } as any;
+    }
+
+    // ✅ En PROD seguimos estrictos
     throw new Error('useProductsStore must be used within a ProductsProvider');
   }
+
   return context;
 }
 
