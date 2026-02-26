@@ -1,43 +1,44 @@
-// Product module types
+// src/app/types/product.ts
 
-export type ProductStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'OUT_OF_STOCK';
-
-export interface ProductVariant {
-  id: string;
-  sku: string;
-  options: {
-    size?: string;
-    color?: string;
-  };
-  price?: number;
-  stock: number;
-  status?: ProductStatus;
-  imageUrl?: string;
-  cost?: number; // COGS unitario para esta variante (opcional, hereda de product si no existe)
-  updatedAt: string;
-}
+export type ProductStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "OUT_OF_STOCK";
 
 export interface ProductImage {
   id: string;
   url: string;
+  key?: string;       // para borrar de S3
   alt?: string;
   isPrimary: boolean;
 }
 
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku?: string;
+  size?: string;
+  color?: string;
+  price?: number;
+  cost?: number;
+  stock: number;
+  images?: ProductImage[];
+  updatedAt?: string;
+}
+
 export interface Product {
   id: string;
+  tenantId: string;
   name: string;
-  sku: string;
-  price: number;
-  stock: number;
+  slug?: string;
+  sku?: string;
+  description?: string;
+  categoryId?: string | null;
   status: ProductStatus;
-  categoryId: string | null;
-  descriptionShort?: string;
+  price?: number;
+  cost?: number;
+  stock?: number;
   images: ProductImage[];
-  updatedAt: string;
-  isArchived: boolean;
   hasVariants?: boolean;
   variants?: ProductVariant[];
-  cost?: number; // COGS unitario (opcional)
-  trackCost?: boolean; // Si false, no se rastrea costo (default: true)
+  trackCost?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

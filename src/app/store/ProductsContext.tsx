@@ -1,285 +1,301 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
-import { type Product } from '../types/product';
-import { mockProducts as initialProducts } from '../data/mockProducts';
-import { useAudit } from './AuditContext';
-import { useAuth } from './AuthContext';
-import { isOutOfStockDerived } from '../utils/stockHelpers';
+// src/app/store/ProductsContext.tsx
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from "react";
+import * as productsApi from "../../api/products";
+import type { Product, ProductStatus } from "../types/product";
+import type { CreateProductPayload, UpdateProductPayload } from "../../api/products";
+import { useAudit } from "./AuditContext";
 
-interface ProductsState {
-  products: Product[];
+// ─── Cache localStorage ───────────────────────────────────────────────────────
+const LS_KEY = "cache:products";
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+type CacheEntry = { data: Product[]; ts: number };
+
+function readCache(): Product[] | null {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const entry: CacheEntry = JSON.parse(raw);
+    if (Date.now() - entry.ts > CACHE_TTL_MS) return null;
+    return entry.data;
+  } catch {
+    return null;
+  }
 }
 
-type ProductsAction =
-  | { type: 'CREATE_PRODUCT'; payload: Product }
-  | { type: 'UPDATE_PRODUCT'; payload: Product }
-  | { type: 'DELETE_PRODUCT'; payload: string }
-  | { type: 'ARCHIVE_PRODUCT'; payload: string }
-  | { type: 'RESTORE_PRODUCT'; payload: string }
-  | { type: 'BULK_UPDATE_STATUS'; payload: { ids: string[]; status: Product['status'] } }
-  | { type: 'PUBLISH_PRODUCT'; payload: string }
-  | { type: 'HIDE_PRODUCT'; payload: string }
-  | { type: 'ADJUST_STOCK'; payload: { productId: string; adjustment: number; variantId?: string } };
-
-interface ProductsContextValue {
-  products: Product[];
-  createProduct: (product: Product) => void;
-  updateProduct: (product: Product) => void;
-  deleteProduct: (id: string) => void;
-  archiveProduct: (id: string) => void;
-  restoreProduct: (id: string) => void;
-  bulkUpdateStatus: (ids: string[], status: Product['status']) => void;
-  publishProduct: (id: string) => Promise<void>;
-  hideProduct: (id: string) => Promise<void>;
-  getById: (id: string) => Product | undefined;
-  isSkuAvailable: (sku: string, currentId?: string) => boolean;
-  adjustStock: (productId: string, adjustment: number, variantId?: string) => void;
+function writeCache(data: Product[]) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ data, ts: Date.now() }));
+  } catch {}
 }
 
-const ProductsContext = createContext<ProductsContextValue | null>(null);
+function clearCache() {
+  localStorage.removeItem(LS_KEY);
+}
 
-function productsReducer(state: ProductsState, action: ProductsAction): ProductsState {
+// ─── State ────────────────────────────────────────────────────────────────────
+export type FetchStatus = "idle" | "loading" | "ready" | "error";
+
+interface State {
+  products: Product[];
+  status: FetchStatus;
+  error: string | null;
+  lastFetch: number | null;
+}
+
+type Action =
+  | { type: "FETCH_START" }
+  | { type: "FETCH_OK"; payload: Product[] }
+  | { type: "FETCH_ERROR"; payload: string }
+  | { type: "SET_FROM_CACHE"; payload: Product[] }
+  | { type: "UPSERT"; payload: Product }
+  | { type: "REMOVE"; payload: string }
+  | { type: "SET_STATUS"; payload: { id: string; status: ProductStatus } };
+
+function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case 'CREATE_PRODUCT':
+    case "FETCH_START":
+      return { ...state, status: "loading", error: null };
+    case "FETCH_OK":
       return {
         ...state,
-        products: [action.payload, ...state.products]
+        status: "ready",
+        products: action.payload,
+        lastFetch: Date.now(),
+        error: null,
       };
-    case 'UPDATE_PRODUCT':
+    case "FETCH_ERROR":
+      return { ...state, status: "error", error: action.payload };
+    case "SET_FROM_CACHE":
+      return { ...state, status: "ready", products: action.payload, error: null };
+    case "UPSERT": {
+      const exists = state.products.some((p) => p.id === action.payload.id);
+      const next = exists
+        ? state.products.map((p) => (p.id === action.payload.id ? action.payload : p))
+        : [action.payload, ...state.products];
+      return { ...state, products: next };
+    }
+    case "REMOVE":
+      return { ...state, products: state.products.filter((p) => p.id !== action.payload) };
+    case "SET_STATUS":
       return {
         ...state,
-        products: state.products.map(p =>
-          p.id === action.payload.id ? action.payload : p
-        )
-      };
-    case 'DELETE_PRODUCT':
-      return {
-        ...state,
-        products: state.products.filter(p => p.id !== action.payload)
-      };
-    case 'ARCHIVE_PRODUCT':
-      return {
-        ...state,
-        products: state.products.map(p =>
-          p.id === action.payload ? { ...p, isArchived: true } : p
-        )
-      };
-    case 'RESTORE_PRODUCT':
-      return {
-        ...state,
-        products: state.products.map(p =>
-          p.id === action.payload ? { ...p, isArchived: false } : p
-        )
-      };
-    case 'BULK_UPDATE_STATUS':
-      return {
-        ...state,
-        products: state.products.map(p =>
-          action.payload.ids.includes(p.id) ? { ...p, status: action.payload.status } : p
-        )
-      };
-    case 'PUBLISH_PRODUCT':
-      return {
-        ...state,
-        products: state.products.map(p =>
-          p.id === action.payload ? { ...p, status: 'ACTIVE' } : p
-        )
-      };
-    case 'HIDE_PRODUCT':
-      return {
-        ...state,
-        products: state.products.map(p =>
-          p.id === action.payload ? { ...p, status: 'PAUSED' } : p
-        )
-      };
-    case 'ADJUST_STOCK':
-      return {
-        ...state,
-        products: state.products.map(p => {
-          if (p.id !== action.payload.productId) return p;
-          
-          // Si es una variante
-          if (action.payload.variantId) {
-            return {
-              ...p,
-              variants: p.variants?.map(v =>
-                v.id === action.payload.variantId
-                  ? { ...v, stock: v.stock + action.payload.adjustment }
-                  : v
-              )
-            };
-          }
-          
-          // Si es el producto base
-          return {
-            ...p,
-            stock: p.stock + action.payload.adjustment
-          };
-        })
+        products: state.products.map((p) =>
+          p.id === action.payload.id ? { ...p, status: action.payload.status } : p
+        ),
       };
     default:
       return state;
   }
 }
 
+// ─── Context ──────────────────────────────────────────────────────────────────
+interface ProductsContextValue {
+  products: Product[];
+  status: FetchStatus;
+  error: string | null;
+  lastFetch: number | null;
+  refresh: () => Promise<void>;
+  createProduct: (payload: CreateProductPayload) => Promise<void>;
+  updateProduct: (id: string, payload: UpdateProductPayload) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  publishProduct: (id: string) => Promise<void>;
+  hideProduct: (id: string) => Promise<void>;
+  adjustStock: (productId: string, delta: number, variantId?: string) => Promise<void>;
+  getById: (id: string) => Product | undefined;
+  isSkuAvailable: (sku: string, currentId?: string) => boolean;
+}
+
+const ProductsContext = createContext<ProductsContextValue | null>(null);
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
 export function ProductsProvider({ children }: { children: ReactNode }) {
   const audit = useAudit();
-  const auth = useAuth();
-  
-  const [state, dispatch] = useReducer(productsReducer, {
-    products: initialProducts
+
+  const [state, dispatch] = useReducer(reducer, {
+    products: [],
+    status: "idle",
+    error: null,
+    lastFetch: null,
   });
 
-  const createProduct = (product: Product) => {
-    dispatch({ type: 'CREATE_PRODUCT', payload: product });
-  };
-
-  const updateProduct = (product: Product) => {
-    dispatch({ type: 'UPDATE_PRODUCT', payload: product });
-  };
-
-  const deleteProduct = (id: string) => {
-    dispatch({ type: 'DELETE_PRODUCT', payload: id });
-  };
-
-  const archiveProduct = (id: string) => {
-    dispatch({ type: 'ARCHIVE_PRODUCT', payload: id });
-  };
-
-  const restoreProduct = (id: string) => {
-    dispatch({ type: 'RESTORE_PRODUCT', payload: id });
-  };
-
-  const bulkUpdateStatus = (ids: string[], status: Product['status']) => {
-    dispatch({ type: 'BULK_UPDATE_STATUS', payload: { ids, status } });
-  };
-
-  const publishProduct = async (id: string) => {
-    const product = state.products.find(p => p.id === id);
-    if (!product) return;
-
-    const wasOutOfStock = isOutOfStockDerived(product);
-    
-    dispatch({ type: 'PUBLISH_PRODUCT', payload: id });
-
-    // Auditar publicación
-    audit.auditLog({
-      action: 'PRODUCT_PUBLISHED',
-      entity: {
-        type: 'product',
-        id: product.id,
-        label: product.name,
-      },
-      changes: [{ field: 'status', from: product.status, to: 'ACTIVE' }],
-    });
-
-    // Si se publicó mientras está agotado, registrar evento especial
-    if (wasOutOfStock) {
-      audit.auditLog({
-        action: 'PRODUCT_PUBLISHED_WHILE_OUT_OF_STOCK',
-        entity: {
-          type: 'product',
-          id: product.id,
-          label: product.name,
-        },
-        metadata: {
-          previousStatus: product.status,
-        },
-      });
+  const refresh = useCallback(async () => {
+    dispatch({ type: "FETCH_START" });
+    try {
+      const res = await productsApi.listProducts();
+      writeCache(res.items);
+      dispatch({ type: "FETCH_OK", payload: res.items });
+    } catch (e: any) {
+      dispatch({ type: "FETCH_ERROR", payload: e?.message ?? "Error al cargar productos" });
     }
-  };
+  }, []);
 
-  const hideProduct = async (id: string) => {
-    const product = state.products.find(p => p.id === id);
-    if (!product) return;
-    
-    dispatch({ type: 'HIDE_PRODUCT', payload: id });
+  // Al montar: cache primero, fetch en background
+  useEffect(() => {
+    const cached = readCache();
+    if (cached) dispatch({ type: "SET_FROM_CACHE", payload: cached });
+    refresh();
+  }, [refresh]);
 
-    // Auditar ocultación
-    audit.auditLog({
-      action: 'PRODUCT_HIDDEN',
-      entity: {
-        type: 'product',
-        id: product.id,
-        label: product.name,
-      },
-      changes: [{ field: 'status', from: product.status, to: 'PAUSED' }],
-    });
-  };
+  const createProduct = useCallback(
+    async (payload: CreateProductPayload) => {
+      const res = await productsApi.createProduct(payload);
+      const created = await productsApi.getProduct(res.id);
+      dispatch({ type: "UPSERT", payload: created });
+      writeCache([created, ...state.products]);
+      audit.auditLog({
+        action: "PRODUCT_CREATED",
+        entity: { type: "product", id: created.id, label: created.name },
+      });
+    },
+    [state.products, audit]
+  );
 
-  const getById = (id: string): Product | undefined => {
-    return state.products.find(p => p.id === id);
-  };
+  const updateProduct = useCallback(
+    async (id: string, payload: UpdateProductPayload) => {
+      await productsApi.updateProduct(id, payload);
+      const updated = await productsApi.getProduct(id);
+      dispatch({ type: "UPSERT", payload: updated });
+      writeCache(state.products.map((p) => (p.id === id ? updated : p)));
+      audit.auditLog({
+        action: "PRODUCT_UPDATED",
+        entity: { type: "product", id: updated.id, label: updated.name },
+      });
+    },
+    [state.products, audit]
+  );
 
-  const isSkuAvailable = (sku: string, currentId?: string): boolean => {
-    // Verificar SKU en productos
-    const usedBySomeProduct = state.products.some(
-      p => p.sku.toLowerCase() === sku.toLowerCase() && p.id !== currentId
-    );
-    
-    if (usedBySomeProduct) return false;
-    
-    // Verificar SKU en variantes
-    const usedInVariants = state.products.some(p => 
-      p.variants?.some(v => v.sku.toLowerCase() === sku.toLowerCase())
-    );
-    
-    return !usedInVariants;
-  };
+  const deleteProduct = useCallback(
+    async (id: string) => {
+      const product = state.products.find((p) => p.id === id);
+      await productsApi.deleteProduct(id);
+      dispatch({ type: "REMOVE", payload: id });
+      clearCache();
+      audit.auditLog({
+        action: "PRODUCT_DELETED",
+        entity: { type: "product", id, label: product?.name ?? id },
+      });
+    },
+    [state.products, audit]
+  );
 
-  const adjustStock = (productId: string, adjustment: number, variantId?: string) => {
-    dispatch({ type: 'ADJUST_STOCK', payload: { productId, adjustment, variantId } });
-  };
+  const publishProduct = useCallback(
+    async (id: string) => {
+      const product = state.products.find((p) => p.id === id);
+      await productsApi.updateProductStatus(id, "ACTIVE");
+      dispatch({ type: "SET_STATUS", payload: { id, status: "ACTIVE" } });
+      writeCache(state.products.map((p) => (p.id === id ? { ...p, status: "ACTIVE" } : p)));
+      audit.auditLog({
+        action: "PRODUCT_PUBLISHED",
+        entity: { type: "product", id, label: product?.name ?? id },
+        changes: [{ field: "status", from: product?.status, to: "ACTIVE" }],
+      });
+    },
+    [state.products, audit]
+  );
 
-  const value: ProductsContextValue = {
-    products: state.products,
-    createProduct,
-    updateProduct,
-    deleteProduct,
-    archiveProduct,
-    restoreProduct,
-    bulkUpdateStatus,
-    publishProduct,
-    hideProduct,
-    getById,
-    isSkuAvailable,
-    adjustStock
-  };
+  const hideProduct = useCallback(
+    async (id: string) => {
+      const product = state.products.find((p) => p.id === id);
+      await productsApi.updateProductStatus(id, "PAUSED");
+      dispatch({ type: "SET_STATUS", payload: { id, status: "PAUSED" } });
+      writeCache(state.products.map((p) => (p.id === id ? { ...p, status: "PAUSED" } : p)));
+      audit.auditLog({
+        action: "PRODUCT_HIDDEN",
+        entity: { type: "product", id, label: product?.name ?? id },
+        changes: [{ field: "status", from: product?.status, to: "PAUSED" }],
+      });
+    },
+    [state.products, audit]
+  );
+
+  const adjustStock = useCallback(
+    async (productId: string, delta: number, variantId?: string) => {
+      await productsApi.adjustInventory({
+        productId,
+        variantId,
+        delta,
+        reason: "MANUAL",
+      });
+      // Re-fetch el producto para tener stock actualizado desde BE
+      const updated = await productsApi.getProduct(productId);
+      dispatch({ type: "UPSERT", payload: updated });
+      writeCache(state.products.map((p) => (p.id === productId ? updated : p)));
+    },
+    [state.products]
+  );
+
+  const getById = useCallback(
+    (id: string) => state.products.find((p) => p.id === id),
+    [state.products]
+  );
+
+  const isSkuAvailable = useCallback(
+    (sku: string, currentId?: string): boolean => {
+      const lower = sku.toLowerCase();
+      return !state.products.some(
+        (p) =>
+          (p.sku?.toLowerCase() === lower && p.id !== currentId) ||
+          p.variants?.some((v) => v.sku?.toLowerCase() === lower)
+      );
+    },
+    [state.products]
+  );
 
   return (
-    <ProductsContext.Provider value={value}>
+    <ProductsContext.Provider
+      value={{
+        products: state.products,
+        status: state.status,
+        error: state.error,
+        lastFetch: state.lastFetch,
+        refresh,
+        createProduct,
+        updateProduct,
+        deleteProduct,
+        publishProduct,
+        hideProduct,
+        adjustStock,
+        getById,
+        isSkuAvailable,
+      }}
+    >
       {children}
     </ProductsContext.Provider>
   );
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useProductsStore() {
-  const context = useContext(ProductsContext);
-
-  if (context === null) {
-    // ✅ En DEV: evita que HMR mate la app por un micro-momento sin provider
+  const ctx = useContext(ProductsContext);
+  if (!ctx) {
     if (import.meta.env.DEV) {
       return {
         products: [],
-        createProduct: () => {},
-        updateProduct: () => {},
-        deleteProduct: () => {},
-        archiveProduct: () => {},
-        restoreProduct: () => {},
-        bulkUpdateStatus: () => {},
+        status: "idle" as FetchStatus,
+        error: null,
+        lastFetch: null,
+        refresh: async () => {},
+        createProduct: async () => {},
+        updateProduct: async () => {},
+        deleteProduct: async () => {},
         publishProduct: async () => {},
         hideProduct: async () => {},
+        adjustStock: async () => {},
         getById: () => undefined,
         isSkuAvailable: () => true,
-        adjustStock: () => {},
-      } as any;
+      };
     }
-
-    // ✅ En PROD seguimos estrictos
-    throw new Error('useProductsStore must be used within a ProductsProvider');
+    throw new Error("useProductsStore must be used within ProductsProvider");
   }
-
-  return context;
+  return ctx;
 }
 
-// Alias para conveniencia
 export const useProducts = useProductsStore;

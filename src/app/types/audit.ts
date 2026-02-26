@@ -83,7 +83,12 @@ export type AuditAction =
   | 'AUTH_LOGIN_FAILED'            // Login fallido
   | 'AUTH_LOGOUT'                  // Logout
   | 'AUDIT_PURGED'                 // Eventos de auditoría purgados
-  | 'REPORT_EXPORTED';             // Reporte exportado
+  | 'REPORT_EXPORTED'
+    | "USER_LOGIN"
+  | "USER_LOGOUT"
+  | "CATEGORY_CREATED"
+  | "CATEGORY_UPDATED"
+  | "CATEGORY_DELETED";             // Reporte exportado
 
 // Entity type for audit events (more specific)
 export type AuditEntityType = 
@@ -213,4 +218,7 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   AUTH_LOGOUT: 'Logout',
   AUDIT_PURGED: 'Eventos de auditoría purgados',
   REPORT_EXPORTED: 'Reporte exportado',
+  USER_LOGIN: 'Login de usuario',
+  USER_LOGOUT: 'Logout de usuario',
+  CATEGORY_DELETED: 'Categoría eliminada',
 };

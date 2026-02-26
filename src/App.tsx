@@ -7,7 +7,7 @@ import { AuthSmokeTest } from "./dev/AuthSmokeTest";
 import { useState, useEffect } from 'react';
 import {  Routes, Route, Navigate, useLocation } from 'react-router';
 import { ProductsProvider } from './app/store/ProductsContext';
-import { CategoryProvider } from './app/store/CategoryContext';
+import { CategoriesProvider }  from './app/store/CategoryContext';
 import { PromotionsProvider } from './app/store/PromotionsContext';
 import { CouponsProvider } from './app/store/CouponsContext';
 import { OrdersProvider } from './app/store/OrdersContext';
@@ -291,7 +291,7 @@ function App() {
                     <RequireAuth>
                       <AuditProvider>
                         <ProductsProvider>
-                          <CategoryProvider>
+                          <CategoriesProvider>
                             <PromotionsProvider>
                               <CouponsProvider>
                                 <CustomersProvider>
@@ -305,7 +305,7 @@ function App() {
                                 </CustomersProvider>
                               </CouponsProvider>
                             </PromotionsProvider>
-                          </CategoryProvider>
+                          </CategoriesProvider>
                         </ProductsProvider>
                       </AuditProvider>
                     </RequireAuth>
