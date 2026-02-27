@@ -5,6 +5,10 @@
       "destination": "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws/:path*"
     },
     {
+      "source": "/api/catalog-products/:path*",
+      "destination": "https://bwlbovwg5kruog7cw6njkkcntq0dwghe.lambda-url.us-east-1.on.aws/:path*"
+    },
+    {
       "source": "/:path*",
       "destination": "/index.html"
     }

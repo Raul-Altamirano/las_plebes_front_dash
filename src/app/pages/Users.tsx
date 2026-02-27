@@ -345,7 +345,7 @@ const actions: Action<SystemUser>[] = canManageUsers
       Nombre: user.name,
       Email: user.email,
       Rol: getRoleById(user.roleId)?.name || 'Sin rol',
-      Estado: USER_STATUS_LABELS[user.status],
+      Estado: USER_STATUS_LABELS[user.status],//Error > Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Record<UserStatus, string>'. No index signature with a parameter of type 'string' was found on type 'Record<UserStatus, string>'.
       Creado: formatDateForCSV(new Date(user.createdAt)),
     }));
     exportToCSV(csvData, 'usuarios');

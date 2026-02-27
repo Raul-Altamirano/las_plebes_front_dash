@@ -33,6 +33,8 @@ import {
 import { Plus, MoreVertical, Archive, ArchiveRestore, Edit2, Tag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { RefreshButton } from '../components/RefreshButton';
+
 
 export function Categories() {
   // Hooks en orden
@@ -42,8 +44,10 @@ export function Categories() {
   const auditContext = useAudit();
 
   // Destructure después de obtener los contextos
-  const { categories, createCategory, updateCategory, archiveCategory, restoreCategory, isNameAvailable, isSlugAvailable } =
-    categoriesContext;
+const { categories, createCategory, updateCategory, deleteCategory, 
+        isNameAvailable, isSlugAvailable,
+        status, lastFetch, refresh } = categoriesContext;
+        
   const { products } = productsContext;
   const { currentUser, hasPermission } = authContext;
   const { auditLog } = auditContext;
@@ -64,73 +68,29 @@ export function Categories() {
   };
 
   // Manejar creación
-  const handleCreate = (data: { name: string; slug: string; description?: string }) => {
-    const newCategory = createCategory(data);
-
-    auditLog({
-      action: 'CATEGORY_CREATED',
-      entity: {
-        type: 'category',
-        id: newCategory.id,
-        label: newCategory.name,
-      },
-    });
-
-    setIsCreateDialogOpen(false);
-  };
+// por esto
+const handleCreate = async (data: { name: string; slug: string; description?: string }) => {
+  await createCategory(data);
+  auditLog({
+    action: 'CATEGORY_CREATED',
+    entity: { type: 'category', id: '', label: data.name },
+  });
+  setIsCreateDialogOpen(false);
+};
 
   // Manejar edición
-  const handleEdit = (data: { name: string; slug: string; description?: string }) => {
-    if (!editingCategory) return;
-
-    const oldCategory = { ...editingCategory };
-    updateCategory(editingCategory.id, data);
-
-    const changes = [];
-    if (oldCategory.name !== data.name) {
-      changes.push({ field: 'name', from: oldCategory.name, to: data.name });
-    }
-    if (oldCategory.slug !== data.slug) {
-      changes.push({ field: 'slug', from: oldCategory.slug, to: data.slug });
-    }
-    if (oldCategory.description !== data.description) {
-      changes.push({ field: 'description', from: oldCategory.description, to: data.description });
-    }
-
-    auditLog({
-      action: 'CATEGORY_UPDATED',
-      entity: {
-        type: 'category',
-        id: editingCategory.id,
-        label: editingCategory.name,
-      },
-      changes,
-    });
-
-    setEditingCategory(null);
-  };
+const handleEdit = async (data: { name: string; slug: string; description?: string }) => {
+  if (!editingCategory) return;
+  await updateCategory(editingCategory.id, data);
+  setEditingCategory(null);
+};
 
   // Manejar archivado
-  const handleArchive = () => {
-    if (!archivingCategory) return;
-
-    const productsCount = getProductsCount(archivingCategory.id);
-    archiveCategory(archivingCategory.id);
-
-    auditLog({
-      action: 'CATEGORY_ARCHIVED',
-      entity: {
-        type: 'category',
-        id: archivingCategory.id,
-        label: archivingCategory.name,
-      },
-      metadata: {
-        productsCount,
-      },
-    });
-
-    setArchivingCategory(null);
-  };
+const handleArchive = async () => {
+  if (!archivingCategory) return;
+  await deleteCategory(archivingCategory.id);
+  setArchivingCategory(null);
+};
 
   // Manejar restauración
   const handleRestore = () => {
@@ -154,6 +114,11 @@ export function Categories() {
   const activeCategories = categories.filter((c) => !c.isArchived);
   const archivedCategories = categories.filter((c) => c.isArchived);
 
+          // destructure del contexto — agrega status, lastFetch, refresh
+
+
+// En el header, junto al botón "Nueva categoría"
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -164,12 +129,16 @@ export function Categories() {
             Gestiona las categorías de productos de tu catálogo
           </p>
         </div>
-        {canCreate && (
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva categoría
-          </Button>
-        )}
+
+<div className="flex items-center gap-3">
+  <RefreshButton status={status} lastFetch={lastFetch} onRefresh={refresh} />
+  {canCreate && (
+    <Button onClick={() => setIsCreateDialogOpen(true)}>
+      <Plus className="w-4 h-4 mr-2" />
+      Nueva categoría
+    </Button>
+  )}
+</div>
       </div>
 
       {/* Tabla de categorías activas */}

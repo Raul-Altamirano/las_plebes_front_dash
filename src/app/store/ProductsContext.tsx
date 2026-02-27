@@ -111,6 +111,8 @@ interface ProductsContextValue {
   adjustStock: (productId: string, delta: number, variantId?: string) => Promise<void>;
   getById: (id: string) => Product | undefined;
   isSkuAvailable: (sku: string, currentId?: string) => boolean;
+    bulkUpdateStatus: (ids: string[], status: ProductStatus) => Promise<void>;
+
 }
 
 const ProductsContext = createContext<ProductsContextValue | null>(null);
@@ -236,6 +238,13 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     (id: string) => state.products.find((p) => p.id === id),
     [state.products]
   );
+const bulkUpdateStatus = useCallback(
+    async (ids: string[], status: ProductStatus) => {
+      await Promise.all(ids.map(id => productsApi.updateProductStatus(id, status)));
+      await refresh();
+    },
+    [refresh]
+  );
 
   const isSkuAvailable = useCallback(
     (sku: string, currentId?: string): boolean => {
@@ -265,6 +274,7 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
         adjustStock,
         getById,
         isSkuAvailable,
+        bulkUpdateStatus
       }}
     >
       {children}
@@ -291,6 +301,7 @@ export function useProductsStore() {
         adjustStock: async () => {},
         getById: () => undefined,
         isSkuAvailable: () => true,
+         bulkUpdateStatus: async () => {},
       };
     }
     throw new Error("useProductsStore must be used within ProductsProvider");

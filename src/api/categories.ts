@@ -1,5 +1,8 @@
 // src/api/categories.ts
-import { apiFetch } from "./http";
+import { createApiClient } from "./http";
+const apiFetch = createApiClient(
+  (import.meta.env.VITE_CATALOG_BASE_URL as string | undefined) ?? "/api/catalog-products"
+);
 import type { Category, CategoryFormData } from "../app/types/category";
 
 export type { Category };
@@ -19,7 +22,7 @@ export async function getCategory(id: string) {
 }
 
 export async function createCategory(payload: CategoryFormData) {
-  return apiFetch<{ id: string }>(BASE, {
+  return apiFetch<{ status: string; data: Category }>(BASE, {
     method: "POST",
     label: "categories.create",
     body: JSON.stringify(payload),
@@ -27,7 +30,7 @@ export async function createCategory(payload: CategoryFormData) {
 }
 
 export async function updateCategory(id: string, payload: Partial<CategoryFormData>) {
-  return apiFetch<{ ok: true }>(`${BASE}/${id}`, {
+  return apiFetch<{ status: string; data: Category }>(`${BASE}/${id}`, {
     method: "PUT",
     label: "categories.update",
     body: JSON.stringify(payload),

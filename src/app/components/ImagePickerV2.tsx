@@ -13,18 +13,15 @@ interface ImagePickerV2Props {
   error?: string;
   disabled?: boolean;
   maxImages?: number;
-  productId?: string; // Para auditoría
+  productId?: string;
+  categoryId?: string | null; // ← nuevo
+  sku?: string;               // ← nuevo
 }
 
-const MAX_IMAGES = 6;
-
 export function ImagePickerV2({ 
-  images, 
-  onChange, 
-  error, 
-  disabled = false,
-  maxImages = MAX_IMAGES,
-  productId 
+  images, onChange, error, disabled = false,
+  maxImages = MAX_IMAGES, productId,
+  categoryId, sku           // ← nuevo
 }: ImagePickerV2Props) {
   const { currentUser, hasPermission } = useAuth();
   const { logImageUploaded, logImageUploadFailed, auditLog } = useAudit();
@@ -107,21 +104,21 @@ export function ImagePickerV2({
 
     try {
       // Subir a S3
-      const { publicUrl, key } = await uploadFileToS3(
-        file,
-        import.meta.env.VITE_UPLOAD_FOLDER || 'products',
-        (progress) => {
-          setUploadProgresses(prev => ({
-            ...prev,
-            [tempId]: {
-              ...prev[tempId],
-              progress,
-              status: 'uploading',
-            },
-          }));
-        }
-      );
-
+const { publicUrl, key } = await uploadFileToS3(
+  file,
+  {
+    folder:     import.meta.env.VITE_UPLOAD_FOLDER || 'productos',
+    productId,   // para PUT (si existe)
+    categoryId:  categoryId ?? undefined,  // para POST
+    sku:         sku ?? undefined,         // para POST
+  },
+  (progress) => {
+    setUploadProgresses(prev => ({
+      ...prev,
+      [tempId]: { ...prev[tempId], progress, status: 'uploading' },
+    }));
+  }
+);
       // Marcar como completado
       setUploadProgresses(prev => ({
         ...prev,

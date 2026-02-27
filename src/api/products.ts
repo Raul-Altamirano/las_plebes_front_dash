@@ -1,6 +1,8 @@
 // src/api/products.ts
-import { apiFetch } from "./http";
-import type { Product, ProductStatus, ProductVariant } from "../app/types/product";
+import { createApiClient } from "./http";
+const apiFetch = createApiClient(
+  (import.meta.env.VITE_CATALOG_BASE_URL as string | undefined) ?? "/api/catalog-products"
+);import type { Product, ProductStatus, ProductVariant } from "../app/types/product";
 
 export type { Product, ProductVariant };
 

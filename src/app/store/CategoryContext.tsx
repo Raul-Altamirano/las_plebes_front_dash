@@ -47,6 +47,7 @@ interface State {
   status: FetchStatus;
   error: string | null;
   lastFetch: number | null;
+
 }
 
 type Action =
@@ -103,6 +104,8 @@ interface CategoriesContextValue {
   updateCategory: (id: string, payload: Partial<CategoryFormData>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   getById: (id: string) => Category | undefined;
+isNameAvailable: (name: string, excludeId?: string) => boolean;
+isSlugAvailable: (slug: string, excludeId?: string) => boolean;
 }
 
 const CategoriesContext = createContext<CategoriesContextValue | null>(null);
@@ -139,21 +142,19 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const createCategory = useCallback(
-    async (payload: CategoryFormData) => {
-      const res = await categoriesApi.createCategory(payload);
-      // Fetch completo para tener el objeto con id real del backend
-      const created = await categoriesApi.getCategory(res.id);
-      dispatch({ type: "UPSERT", payload: created });
-      writeCache([...state.categories, created]);
-      audit.auditLog({
-        action: "CATEGORY_CREATED",
-        entity: { type: "category", id: created.id, label: created.name },
-      });
-    },
-    [state.categories, audit]
-  );
-
+const createCategory = useCallback(
+  async (payload: CategoryFormData) => {
+    const res = await categoriesApi.createCategory(payload);
+    const created = res.data;  // ✅ ya tipado correctamente
+    dispatch({ type: "UPSERT", payload: created });
+    writeCache([...state.categories, created]);
+    audit.auditLog({
+      action: "CATEGORY_CREATED",
+      entity: { type: "category", id: created.id, label: created.name },
+    });
+  },
+  [state.categories, audit]
+);
   const updateCategory = useCallback(
     async (id: string, payload: Partial<CategoryFormData>) => {
       await categoriesApi.updateCategory(id, payload);
@@ -190,6 +191,22 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
     [state.categories]
   );
 
+const isNameAvailable = useCallback(
+  (name: string, excludeId?: string) =>
+    !state.categories.some(
+      (c) => c.name.toLowerCase() === name.toLowerCase() && c.id !== excludeId
+    ),
+  [state.categories]
+);
+
+const isSlugAvailable = useCallback(
+  (slug: string, excludeId?: string) =>
+    !state.categories.some(
+      (c) => c.slug.toLowerCase() === slug.toLowerCase() && c.id !== excludeId
+    ),
+  [state.categories]
+);
+
   return (
     <CategoriesContext.Provider
       value={{
@@ -202,6 +219,8 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
         updateCategory,
         deleteCategory,
         getById,
+        isSlugAvailable,
+        isNameAvailable,
       }}
     >
       {children}
@@ -224,6 +243,8 @@ export function useCategoriesStore() {
         updateCategory: async () => {},
         deleteCategory: async () => {},
         getById: () => undefined,
+        isNameAvailable: () => true,
+        isSlugAvailable: () => true,
       };
     }
     throw new Error("useCategoriesStore must be used within CategoriesProvider");
@@ -236,8 +257,8 @@ export function generateSlug(name: string): string {
   return name
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w-]/g, "");
+    .replace(/\s+/g, '-')
+    .replace(/[^\w-]/g, '');
 }
 
 export const useCategories = useCategoriesStore;

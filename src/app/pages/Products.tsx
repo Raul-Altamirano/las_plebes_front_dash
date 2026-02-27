@@ -23,8 +23,8 @@ import { isOutOfStockDerived } from '../utils/stockHelpers';
 import { exportToCSV, formatDateForCSV, formatMoneyForCSV } from '../utils/csvExport';
 
 export function Products() {
-  const { products, bulkUpdateStatus, archiveProduct } = useProductsStore();
-  const { list: listCategories } = useCategories();
+  const { products, bulkUpdateStatus, deleteProduct: archiveProduct } = useProductsStore();
+const { categories } = useCategories();
   const { hasPermission, user } = useAuth();
   const { auditLog } = useAudit();
   const {
@@ -89,7 +89,7 @@ export function Products() {
 
   // Get available categories (only active ones for filters)
   const availableCategories = useMemo(() => {
-    const activeCategories = listCategories(false); // No archivadas
+const activeCategories = categories.filter(c => c.status === 'ACTIVE');
     return [
       { value: 'Todas', label: 'Todas' },
       ...activeCategories.map(cat => ({
@@ -97,7 +97,7 @@ export function Products() {
         label: cat.name
       }))
     ];
-  }, [listCategories]);
+  }, [categories]);
 
   // Apply filters, sort, and pagination
   const processedData = useMemo(() => {
@@ -118,7 +118,7 @@ export function Products() {
 
   // Calcular total de productos agotados (sin filtros)
   const outOfStockCount = useMemo(() => {
-    return products.filter(p => !p.isArchived && isOutOfStockDerived(p)).length;
+    return products.filter(p => isOutOfStockDerived(p)).length;
   }, [products]);
 
   // Check if user can create products
@@ -216,11 +216,11 @@ export function Products() {
   // Export CSV handler
   const handleExportCSV = () => {
     const canViewCosts = hasPermission('cost:read');
-    const categories = listCategories(true); // Incluir todas para lookup
+const allCategories = categories;
     
     // Preparar datos para exportación
     const exportData = processedData.allFiltered.map(product => {
-      const category = categories.find(c => c.id === product.categoryId);
+const category = allCategories.find(c => c.id === product.categoryId);
       
       const row: any = {
         sku: product.sku,

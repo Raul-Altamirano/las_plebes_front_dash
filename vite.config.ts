@@ -11,13 +11,18 @@ export default defineConfig({
     tailwindcss(),
   ],
 server: {
-  proxy: {
-    "/identity": {  // ← era /api/identity
-      target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
-      changeOrigin: true,
-      rewrite: (p) => p.replace(/^\/identity/, ""),
-    },
+proxy: {
+  "/api/identity": {
+    target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
+    changeOrigin: true,
+    rewrite: (p) => p.replace(/^\/api\/identity/, ""),
   },
+  "/api/catalog-products": {
+    target: "https://4hwgeresndp2ot6b4jb47f6imq0iqdwq.lambda-url.us-east-1.on.aws",
+    changeOrigin: true,
+    rewrite: (p) => p.replace(/^\/api\/catalog-products/, ""),
+  },
+},
 },
 
 

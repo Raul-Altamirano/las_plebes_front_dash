@@ -20,7 +20,7 @@ export function ProductForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { products, createProduct, updateProduct, getById } = useProductsStore();
-  const { list: listCategories, getById: getCategoryById } = useCategories();
+const { categories, getById: getCategoryById } = useCategories();
   const { showToast } = useToast();
   const { currentUser, hasPermission } = useAuth();
   const { auditLog } = useAudit();
@@ -40,7 +40,7 @@ export function ProductForm() {
   const isStockOnlyMode = !canUpdateProduct && canUpdateInventory;
 
   // Get active categories
-  const activeCategories = listCategories(false); // No archivadas
+const activeCategories = categories.filter(c => c.status === 'ACTIVE');
 
   // Form state
   const [formData, setFormData] = useState<Partial<Product>>({
@@ -156,8 +156,9 @@ export function ProductForm() {
         stock: formData.stock || 0,
         status: targetStatus,
         categoryId: formData.categoryId!,
-        descriptionShort: formData.descriptionShort,
-        images: formData.images || [],
+
+  description: formData.description,  // era descriptionShort
+      images: formData.images || [],
         updatedAt: new Date().toISOString(),
         isArchived: originalProduct?.isArchived || false,
         hasVariants: formData.hasVariants || false,
@@ -173,7 +174,7 @@ export function ProductForm() {
       };
 
       if (isEdit) {
-        updateProduct(productData);
+  await updateProduct(id!, productData);  // ← await, llama al BE
         
         // Registrar audit log
         if (originalProduct) {
@@ -192,7 +193,7 @@ export function ProductForm() {
         
         showToast('success', 'Producto actualizado correctamente');
       } else {
-        createProduct(productData);
+  await createProduct(productData);       // ← await, llama al BE
         
         // Registrar audit log
         auditLog({
@@ -753,13 +754,15 @@ export function ProductForm() {
               </p>
             </div>
 
-            <ImagePickerV2
-              images={formData.images || []}
-              onChange={(images) => handleChange('images', images)}
-              error={errors.images}
-              maxImages={6}
-              productId={id}
-            />
+<ImagePickerV2
+  images={formData.images || []}
+  onChange={(images) => handleChange('images', images)}
+  error={errors.images}
+  maxImages={6}
+  productId={id}
+  categoryId={formData.categoryId}  // ← nuevo
+  sku={formData.sku}                // ← nuevo
+/>
           </div>
         </div>
       </div>
