@@ -25,9 +25,9 @@ export function validateProductDraft(product: Partial<Product>, allProducts: Pro
     if (!product.sku || product.sku.trim() === '') {
       errors.push({ field: 'sku', message: 'El SKU es requerido' });
     } else {
-      const isDuplicate = allProducts.some(
-        p => p.sku.toLowerCase() === product.sku!.toLowerCase() && p.id !== currentId
-      );
+const isDuplicate = allProducts.some(
+  p => p.sku?.toLowerCase() === product.sku!.toLowerCase() && p.id !== currentId
+);
       if (isDuplicate) {
         errors.push({ field: 'sku', message: 'Este SKU ya está en uso' });
       }
@@ -54,11 +54,11 @@ export function validateProductDraft(product: Partial<Product>, allProducts: Pro
           });
         } else {
           // Verificar unicidad global (contra otros productos y sus variantes)
-          const skuInUse = allProducts.some(p => {
-            if (p.id === currentId) return false;
-            if (p.sku.toLowerCase() === variant.sku.toLowerCase()) return true;
-            return p.variants?.some(v => v.sku.toLowerCase() === variant.sku.toLowerCase());
-          });
+const skuInUse = allProducts.some(p => {
+  if (p.id === currentId) return false;
+  if (p.sku?.toLowerCase() === variant.sku?.toLowerCase()) return true;
+  return p.variants?.some(v => v.sku?.toLowerCase() === variant.sku?.toLowerCase());
+});
           
           if (skuInUse) {
             errors.push({ 

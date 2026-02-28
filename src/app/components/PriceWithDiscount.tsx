@@ -50,14 +50,14 @@ export function PriceWithDiscount({ product, showLabel = false }: PriceWithDisco
         {priceInfo.hasDiscount ? (
           <>
             <span className="text-muted-foreground line-through text-sm">
-              ${priceInfo.basePrice.toFixed(2)}
+              ${(priceInfo.basePrice ?? 0).toFixed(2)}
             </span>
             <span className="font-medium text-green-600">
-              ${priceInfo.effectivePrice.toFixed(2)}
+             ${(priceInfo.effectivePrice ?? 0).toFixed(2)}
             </span>
           </>
         ) : (
-          <span>${priceInfo.basePrice.toFixed(2)}</span>
+          <span>${(priceInfo.basePrice ?? 0).toFixed(2)}</span>
         )}
       </div>
       {priceInfo.hasDiscount && priceInfo.appliedPromotions.length > 0 && (

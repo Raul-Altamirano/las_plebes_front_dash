@@ -218,7 +218,7 @@ export function DataTable({ products, onClearFilters, selectedIds, onSelectionCh
             </thead>
             <tbody className="divide-y divide-gray-200">
               {products.map((product) => {
-                const primaryImage = product.images.find(img => img.isPrimary) || product.images[0];
+const primaryImage = (product.images ?? []).find(img => img.isPrimary) || (product.images ?? [])[0];
                 const isSelected = selectedIds.includes(product.id);
                 
                 return (
@@ -325,7 +325,7 @@ export function DataTable({ products, onClearFilters, selectedIds, onSelectionCh
         {/* Mobile Cards */}
         <div className="md:hidden divide-y divide-gray-200">
           {products.map((product) => {
-            const primaryImage = product.images.find(img => img.isPrimary) || product.images[0];
+const primaryImage = (product.images ?? []).find(img => img.isPrimary) || (product.images ?? [])[0];
             const isSelected = selectedIds.includes(product.id);
             
             return (

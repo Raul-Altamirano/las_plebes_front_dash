@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { ArrowLeft, Save, Loader2, AlertCircle, ShieldAlert, DollarSign, TrendingUp, Info } from 'lucide-react';
 import { useProductsStore } from '../store/ProductsContext';
@@ -15,6 +15,7 @@ import { getEffectiveCost, calculateUnitProfit, calculateMarginPercent, formatCu
 import type { Product, ProductStatus, ProductImage, ProductVariant } from '../types/product';
 import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
+
 
 export function ProductForm() {
   const { id } = useParams();
@@ -35,6 +36,8 @@ const { categories, getById: getCategoryById } = useCategories();
   const canUpdateInventory = hasPermission('inventory:update');
   const canPublish = hasPermission('product:publish');
   const canUploadMedia = hasPermission('media:upload');
+const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
+
 
   // Modo "stock-only" para rol OPS
   const isStockOnlyMode = !canUpdateProduct && canUpdateInventory;
@@ -129,94 +132,101 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
   };
 
   const handleSubmit = async (saveAsDraft: boolean = false) => {
-    const targetStatus = saveAsDraft ? 'DRAFT' : (formData.status || 'ACTIVE');
-    
-    // Validación de permisos para publicar
-    if (targetStatus === 'ACTIVE' && !canPublish && originalProduct?.status !== 'ACTIVE') {
-      showToast('error', 'No tienes permiso para publicar productos');
-      return;
-    }
+  const targetStatus = saveAsDraft ? 'DRAFT' : (formData.status || 'ACTIVE');
 
-    if (!validateForm(targetStatus)) {
-      showToast('error', 'Por favor corrige los errores antes de guardar');
-      return;
-    }
+  if (targetStatus === 'ACTIVE' && !canPublish && originalProduct?.status !== 'ACTIVE') {
+    showToast('error', 'No tienes permiso para publicar productos');
+    return;
+  }
 
-    setIsLoading(true);
+  if (!validateForm(targetStatus)) {
+    showToast('error', 'Por favor corrige los errores antes de guardar');
+    return;
+  }
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+  setIsLoading(true);
 
-    try {
-      const productData: Product = {
-        id: id || Math.random().toString(36).substring(7),
-        name: formData.name!,
-        sku: formData.sku!,
-        price: formData.price || 0,
-        stock: formData.stock || 0,
-        status: targetStatus,
-        categoryId: formData.categoryId!,
 
-  description: formData.description,  // era descriptionShort
-      images: formData.images || [],
-        updatedAt: new Date().toISOString(),
-        isArchived: originalProduct?.isArchived || false,
-        hasVariants: formData.hasVariants || false,
-        variants: formData.variants || [],
-        cost: formData.cost,
-        trackCost: formData.trackCost !== undefined ? formData.trackCost : true,
-      };
+// ─── Candado: detectar cambios ────────────────────────────────────────────
+const uploadedImages = uploadRef.current ? await uploadRef.current() : null;
+const hasImageChanges = uploadedImages !== null;
 
-      const actor = {
-        id: currentUser.id,
-        name: currentUser.name,
-        role: currentUser.role,
-      };
+const hasFieldChanges = isEdit && originalProduct ? (
+  formData.name        !== originalProduct.name        ||
+  formData.sku         !== originalProduct.sku         ||
+  formData.price       !== originalProduct.price       ||
+  formData.stock       !== originalProduct.stock       ||
+  formData.categoryId  !== originalProduct.categoryId  ||
+  formData.description !== originalProduct.description ||
+  formData.cost        !== originalProduct.cost        ||
+  formData.status      !== originalProduct.status      ||
+  formData.trackCost   !== originalProduct.trackCost   ||
+  formData.hasVariants !== originalProduct.hasVariants
+) : true; // Si es creación, siempre hay "cambios"
+console.log('[handleSubmit] isEdit:', isEdit);
+console.log('[handleSubmit] hasImageChanges:', hasImageChanges);
+console.log('[handleSubmit] uploadedImages:', uploadedImages);
+console.log('[handleSubmit] hasFieldChanges:', hasFieldChanges);
+console.log('[handleSubmit] formData:', formData);
+console.log('[handleSubmit] originalProduct:', originalProduct);
+console.log('[handleSubmit] diff:', {
+  name:        formData.name        !== originalProduct?.name,
+  sku:         formData.sku         !== originalProduct?.sku,
+  price:       formData.price       !== originalProduct?.price,
+  stock:       formData.stock       !== originalProduct?.stock,
+  categoryId:  formData.categoryId  !== originalProduct?.categoryId,
+  description: formData.description !== originalProduct?.description,
+  cost:        formData.cost        !== originalProduct?.cost,
+  status:      formData.status      !== originalProduct?.status,
+  trackCost:   formData.trackCost   !== originalProduct?.trackCost,
+  hasVariants: formData.hasVariants !== originalProduct?.hasVariants,
+});
+if (isEdit && !hasFieldChanges && !hasImageChanges) {
+  showToast('info', 'No hay cambios que guardar');
+  setIsLoading(false);
+  return;
+}
 
-      if (isEdit) {
-  await updateProduct(id!, productData);  // ← await, llama al BE
-        
-        // Registrar audit log
-        if (originalProduct) {
-          auditLog({
-            action: 'PRODUCT_UPDATED',
-            entity: {
-              type: 'product',
-              id: productData.id,
-              label: productData.name,
-            },
-            changes: [
-              { field: 'product', oldValue: originalProduct.name, newValue: productData.name }
-            ]
-          });
-        }
-        
-        showToast('success', 'Producto actualizado correctamente');
-      } else {
-  await createProduct(productData);       // ← await, llama al BE
-        
-        // Registrar audit log
-        auditLog({
-          action: 'PRODUCT_CREATED',
-          entity: {
-            type: 'product',
-            id: productData.id,
-            label: productData.name,
-          },
-          changes: []
-        });
-        
-        showToast('success', 'Producto creado correctamente');
-      }
-
-      setIsDirty(false);
-      navigate('/products');
-    } catch (error) {
-      showToast('error', 'Error al guardar el producto');
-    } finally {
-      setIsLoading(false);
-    }
+try {
+  const productData: Product = {
+    id:          id || Math.random().toString(36).substring(7),
+    name:        formData.name!,
+    sku:         formData.sku!,
+    price:       formData.price       || 0,
+    stock:       formData.stock       || 0,
+    status:      targetStatus,
+    categoryId:  formData.categoryId!,
+    description: formData.description,
+    images:      uploadedImages ?? formData.images ?? [],  // ← usar el uploadedImages de arriba
+    updatedAt:   new Date().toISOString(),
+    isArchived:  originalProduct?.isArchived || false,
+    hasVariants: formData.hasVariants || false,
+    variants:    formData.variants    || [],
+    cost:        formData.cost,
+    trackCost:   formData.trackCost !== undefined ? formData.trackCost : true,
   };
+  console.log('[handleSubmit] productData.images:', productData.images);
+
+    if (isEdit) {
+      await updateProduct(id!, productData);
+      if (originalProduct) {
+      }
+      showToast('success', 'Producto actualizado correctamente');
+    } else {
+      await createProduct(productData);
+
+      showToast('success', 'Producto creado correctamente');
+    }
+
+    setIsDirty(false);
+    navigate('/products');
+  } catch (error) {
+    console.error('[handleSubmit] Error:', error);
+    showToast('error', 'Error al guardar el producto');
+  } finally {
+    setIsLoading(false);  // ← siempre se ejecuta
+  }
+};
 
   // Submit para modo stock-only
   const handleStockOnlySubmit = async () => {
@@ -760,8 +770,9 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
   error={errors.images}
   maxImages={6}
   productId={id}
-  categoryId={formData.categoryId}  // ← nuevo
-  sku={formData.sku}                // ← nuevo
+  categoryId={formData.categoryId}
+  sku={formData.sku}
+  uploadRef={uploadRef}  // ← nuevo
 />
           </div>
         </div>

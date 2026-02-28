@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { CheckCircle2, XCircle, AlertCircle, X } from 'lucide-react';
 
-type ToastType = 'success' | 'error' | 'warning';
+type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 interface Toast {
   id: string;
