@@ -25,7 +25,7 @@ proxy: {
     "/api/marketing": {
     target: "https://yea4yna7pn626f4bmw6w5cnwdm0tuvgr.lambda-url.us-east-1.on.aws",
     changeOrigin: true,
-    rewrite: (p) => p.replace(/^\/api\/catalog-products/, ""),
+    rewrite: (p) => p.replace(/^\/api\/promotions/, ""),
   },
 },
 },

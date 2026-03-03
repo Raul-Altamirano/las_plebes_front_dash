@@ -89,7 +89,7 @@ const { categories } = useCategories();
 
   // Get available categories (only active ones for filters)
   const availableCategories = useMemo(() => {
-const activeCategories = categories.filter(c => c.status === 'ACTIVE');
+const activeCategories = (categories ?? []).filter(c => c.status === 'ACTIVE');
     return [
       { value: 'Todas', label: 'Todas' },
       ...activeCategories.map(cat => ({
@@ -118,7 +118,7 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
 
   // Calcular total de productos agotados (sin filtros)
   const outOfStockCount = useMemo(() => {
-    return products.filter(p => isOutOfStockDerived(p)).length;
+    return (products ?? []).filter(p => isOutOfStockDerived(p)).length;
   }, [products]);
 
   // Check if user can create products
@@ -153,7 +153,7 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
 
   const handleBulkActivate = () => {
     // Validar que todos los productos tengan imágenes y precio válido
-    const productsToActivate = products.filter(p => selectedIds.includes(p.id));
+    const productsToActivate = (products ?? []).filter(p => selectedIds.includes(p.id));
     const invalidProducts = productsToActivate.filter(p => p.images.length === 0 || p.price <= 0);
 
     if (invalidProducts.length > 0) {

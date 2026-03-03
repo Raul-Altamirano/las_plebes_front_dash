@@ -27,7 +27,7 @@ export const SORT_OPTIONS = [
  * Filter products based on query state
  */
 export function filterProducts(products: Product[], queryState: ProductQueryState): Product[] {
-  return products.filter((product) => {
+  return (products ?? []).filter((product) => {
     // Search filter (nombre o SKU)
     const searchLower = queryState.q.toLowerCase().trim();
     const matchesSearch = 
@@ -111,16 +111,16 @@ export function paginate<T>(items: T[], page: number, pageSize: number) {
  * Get dashboard metrics
  */
 export function getDashboardMetrics(products: Product[], lowStockThreshold: number = DEFAULT_LOW_STOCK_THRESHOLD) {
-  const activeProducts = products.filter(p => p.status === 'ACTIVE');
-  const drafts = products.filter(p => p.status === 'DRAFT');
+  const activeProducts = (products ?? []).filter(p => p.status === 'ACTIVE');
+  const drafts = (products ?? []).filter(p => p.status === 'DRAFT');
   
   // Stock bajo: solo productos ACTIVE o PAUSED con stock <= threshold
-  const lowStockProducts = products.filter(
+  const lowStockProducts = (products ?? []).filter(
     p => (p.status === 'ACTIVE' || p.status === 'PAUSED') && p.stock <= lowStockThreshold
   );
 
   // Últimos productos editados (ordenados por updatedAt desc)
-  const recentProducts = [...products]
+  const recentProducts = [...(products ?? [])]
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     .slice(0, RECENT_PRODUCTS_LIMIT);
 

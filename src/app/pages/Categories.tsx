@@ -111,8 +111,8 @@ const handleArchive = async () => {
   };
 
   // Separar activas y archivadas
-  const activeCategories = categories.filter((c) => !c.isArchived);
-  const archivedCategories = categories.filter((c) => c.isArchived);
+  const activeCategories = (categories ?? []).filter((c) => !c.isArchived);
+  const archivedCategories =(categories ?? []).filter((c) => c.isArchived);
 
           // destructure del contexto — agrega status, lastFetch, refresh
 
