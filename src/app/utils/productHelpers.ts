@@ -33,7 +33,7 @@ export function filterProducts(products: Product[], queryState: ProductQueryStat
     const matchesSearch = 
       searchLower === '' ||
       product.name.toLowerCase().includes(searchLower) ||
-      product.sku.toLowerCase().includes(searchLower);
+      (product.sku ?? '').toLowerCase().includes(searchLower);
 
     // Status filter
     const matchesStatus = 
@@ -73,11 +73,11 @@ export function sortProducts(products: Product[], sortKey: SortOption): Product[
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       );
     case 'PRICE_ASC':
-      return sorted.sort((a, b) => a.price - b.price);
+      return sorted.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
     case 'PRICE_DESC':
-      return sorted.sort((a, b) => b.price - a.price);
+      return sorted.sort((a, b) => (b.price ?? 0) - (a.price ?? 0));
     case 'STOCK_ASC':
-      return sorted.sort((a, b) => a.stock - b.stock);
+      return sorted.sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
     case 'NAME_ASC':
       return sorted.sort((a, b) => a.name.localeCompare(b.name));
     default:
@@ -116,7 +116,7 @@ export function getDashboardMetrics(products: Product[], lowStockThreshold: numb
   
   // Stock bajo: solo productos ACTIVE o PAUSED con stock <= threshold
   const lowStockProducts = (products ?? []).filter(
-    p => (p.status === 'ACTIVE' || p.status === 'PAUSED') && p.stock <= lowStockThreshold
+    p => (p.status === 'ACTIVE' || p.status === 'PAUSED') && (p.stock ?? 0) <= lowStockThreshold
   );
 
   // Últimos productos editados (ordenados por updatedAt desc)
@@ -126,7 +126,7 @@ export function getDashboardMetrics(products: Product[], lowStockThreshold: numb
 
   // Top productos con stock bajo (ordenados por stock ascendente)
   const topLowStock = [...lowStockProducts]
-    .sort((a, b) => a.stock - b.stock)
+    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
     .slice(0, LOW_STOCK_PRODUCTS_LIMIT);
 
   return {

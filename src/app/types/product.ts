@@ -39,6 +39,7 @@ export interface Product {
   hasVariants?: boolean;
   variants?: ProductVariant[];
   trackCost?: boolean;
+    isArchived?: boolean;           // <-- added property
   createdAt: string;
   updatedAt: string;
 }
