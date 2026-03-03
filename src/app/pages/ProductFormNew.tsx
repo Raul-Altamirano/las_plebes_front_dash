@@ -188,8 +188,7 @@ if (isEdit && !hasFieldChanges && !hasImageChanges) {
 }
 
 try {
-  const productData: Product = {
-    id:          id || Math.random().toString(36).substring(7),
+  const basePayload = {
     name:        formData.name!,
     sku:         formData.sku!,
     price:       formData.price       || 0,
@@ -197,7 +196,7 @@ try {
     status:      targetStatus,
     categoryId:  formData.categoryId!,
     description: formData.description,
-    images:      uploadedImages ?? formData.images ?? [],  // ← usar el uploadedImages de arriba
+    images:      uploadedImages ?? formData.images ?? [],
     updatedAt:   new Date().toISOString(),
     isArchived:  originalProduct?.isArchived || false,
     hasVariants: formData.hasVariants || false,
@@ -205,27 +204,23 @@ try {
     cost:        formData.cost,
     trackCost:   formData.trackCost !== undefined ? formData.trackCost : true,
   };
-  console.log('[handleSubmit] productData.images:', productData.images);
 
-    if (isEdit) {
-      await updateProduct(id!, productData);
-      if (originalProduct) {
-      }
-      showToast('success', 'Producto actualizado correctamente');
-    } else {
-      await createProduct(productData);
-
-      showToast('success', 'Producto creado correctamente');
-    }
-
-    setIsDirty(false);
-    navigate('/products');
-  } catch (error) {
-    console.error('[handleSubmit] Error:', error);
-    showToast('error', 'Error al guardar el producto');
-  } finally {
-    setIsLoading(false);  // ← siempre se ejecuta
+  if (isEdit) {
+    await updateProduct(id!, basePayload);
+    showToast('success', 'Producto actualizado correctamente');
+  } else {
+    await createProduct(basePayload);
+    showToast('success', 'Producto creado correctamente');
   }
+
+  setIsDirty(false);
+  navigate('/products');
+} catch (error) {
+  console.error('[handleSubmit] Error:', error);
+  showToast('error', 'Error al guardar el producto');
+} finally {
+  setIsLoading(false);
+}
 };
 
   // Submit para modo stock-only

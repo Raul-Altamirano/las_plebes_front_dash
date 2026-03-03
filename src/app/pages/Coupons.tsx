@@ -1,3 +1,4 @@
+//    /src/app/pages/Cupons.tsx
 import { useState, useMemo } from 'react';
 import { Plus, Edit, Power, PowerOff, Trash2, Ticket, Calendar, Target, RotateCcw } from 'lucide-react';
 import { useCoupons } from '../store/CouponsContext';
@@ -37,7 +38,7 @@ import { getPromotionStatus, validateCouponCode } from '../utils/promotionHelper
 import type { Coupon, DiscountType, PromotionScope, PromotionStatus } from '../types/promotion';
 
 export default function Coupons() {
-  const { coupons, addCoupon, updateCoupon, toggleCoupon, deleteCoupon, resetUsageCount, getCouponByCode } = useCoupons();
+  const { coupons, createCoupon, updateCoupon, refresh, deleteCoupon } = useCoupons();
   const { categories } = useCategories();
   const { products } = useProducts();
   const { auditLog } = useAudit();
@@ -133,115 +134,117 @@ export default function Coupons() {
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    
-    // Validar código
-    const codeValidation = validateCouponCode(formData.code);
-    if (!codeValidation.valid) {
-      newErrors.code = codeValidation.error!;
-    } else {
-      // Verificar que no exista otro cupón con el mismo código
-      const existingCoupon = getCouponByCode(formData.code);
-      if (existingCoupon && (!editingCoupon || existingCoupon.id !== editingCoupon.id)) {
-        newErrors.code = 'Ya existe un cupón con este código';
-      }
+  const newErrors: Record<string, string> = {};
+
+  // Código (solo formato)
+  const codeValidation = validateCouponCode(formData.code);
+  if (!codeValidation.valid) {
+    newErrors.code = codeValidation.error!;
+  }
+
+  // Valor
+  const value = parseFloat(formData.value);
+  if (isNaN(value)) {
+    newErrors.value = 'El valor debe ser un número';
+  } else if (formData.type === 'PERCENT' && (value < 1 || value > 90)) {
+    newErrors.value = 'El porcentaje debe estar entre 1 y 90';
+  } else if (formData.type === 'FIXED' && value <= 0) {
+    newErrors.value = 'El monto debe ser mayor a 0';
+  }
+
+  // minSubtotal
+  if (formData.minSubtotal) {
+    const minSubtotal = parseFloat(formData.minSubtotal);
+    if (isNaN(minSubtotal) || minSubtotal < 0) {
+      newErrors.minSubtotal = 'El subtotal mínimo debe ser un número válido';
     }
-    
-    // Validar valor
-    const value = parseFloat(formData.value);
-    if (isNaN(value)) {
-      newErrors.value = 'El valor debe ser un número';
-    } else if (formData.type === 'PERCENT' && (value < 1 || value > 90)) {
-      newErrors.value = 'El porcentaje debe estar entre 1 y 90';
-    } else if (formData.type === 'FIXED' && value <= 0) {
-      newErrors.value = 'El monto debe ser mayor a 0';
+  }
+
+  // usageLimit
+  if (formData.usageLimit) {
+    const usageLimit = parseInt(formData.usageLimit, 10);
+    if (isNaN(usageLimit) || usageLimit < 1) {
+      newErrors.usageLimit = 'El límite de usos debe ser un entero mayor a 0';
     }
-    
-    // Validar minSubtotal
-    if (formData.minSubtotal) {
-      const minSubtotal = parseFloat(formData.minSubtotal);
-      if (isNaN(minSubtotal) || minSubtotal < 0) {
-        newErrors.minSubtotal = 'El subtotal mínimo debe ser un número válido';
-      }
+  }
+
+  // Fechas
+  if (formData.startsAt && formData.endsAt) {
+    if (new Date(formData.endsAt) <= new Date(formData.startsAt)) {
+      newErrors.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
     }
-    
-    // Validar usageLimit
-    if (formData.usageLimit) {
-      const usageLimit = parseInt(formData.usageLimit);
-      if (isNaN(usageLimit) || usageLimit < 1) {
-        newErrors.usageLimit = 'El límite de usos debe ser un número entero mayor a 0';
-      }
-    }
-    
-    // Validar fechas
-    if (formData.startsAt && formData.endsAt) {
-      if (new Date(formData.endsAt) <= new Date(formData.startsAt)) {
-        newErrors.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
-      }
-    }
-    
-    // Validar alcance
-    if (!formData.scopeAll && formData.scopeCategoryIds.length === 0 && formData.scopeProductIds.length === 0) {
-      newErrors.scope = 'Debes seleccionar al menos una categoría o producto';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  }
+
+  // Alcance
+  if (!formData.scopeAll && formData.scopeCategoryIds.length === 0 && formData.scopeProductIds.length === 0) {
+    newErrors.scope = 'Debes seleccionar al menos una categoría o producto';
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
+
+const handleSubmit = async () => {
+  if (!validateForm()) return;
+
+  const scope: PromotionScope = {
+    all: formData.scopeAll,
+    categoryIds: formData.scopeAll ? undefined : formData.scopeCategoryIds,
+    productIds: formData.scopeAll ? undefined : formData.scopeProductIds,
   };
 
-  const handleSubmit = () => {
-    if (!validateForm()) return;
-    
-    const scope: PromotionScope = {
-      all: formData.scopeAll,
-      categoryIds: formData.scopeAll ? undefined : formData.scopeCategoryIds,
-      productIds: formData.scopeAll ? undefined : formData.scopeProductIds,
-    };
-    
-    const couponData = {
-      code: formData.code.trim().toUpperCase(),
-      type: formData.type,
-      value: parseFloat(formData.value),
-      minSubtotal: formData.minSubtotal ? parseFloat(formData.minSubtotal) : undefined,
-      startsAt: formData.startsAt ? new Date(formData.startsAt).toISOString() : undefined,
-      endsAt: formData.endsAt ? new Date(formData.endsAt).toISOString() : undefined,
-      usageLimit: formData.usageLimit ? parseInt(formData.usageLimit) : undefined,
-      isActive: formData.isActive,
-      scope,
-      stackable: formData.stackable,
-    };
-    
+  const couponData = {
+    code: formData.code.trim().toUpperCase(),
+    type: formData.type,
+    value: parseFloat(formData.value),
+    minSubtotal: formData.minSubtotal ? parseFloat(formData.minSubtotal) : undefined,
+    startsAt: formData.startsAt ? new Date(formData.startsAt).toISOString() : undefined,
+    endsAt: formData.endsAt ? new Date(formData.endsAt).toISOString() : undefined,
+    usageLimit: formData.usageLimit ? parseInt(formData.usageLimit, 10) : undefined,
+    isActive: formData.isActive,
+    scope,
+    stackable: formData.stackable,
+  };
+
+  try {
+    setErrors({});
+
     if (editingCoupon) {
-      updateCoupon(editingCoupon.id, couponData);
+      await updateCoupon(editingCoupon.id, couponData);
       auditLog({
         action: 'COUPON_UPDATED',
-        entity: {
-          type: 'coupon',
-          id: editingCoupon.id,
-          label: couponData.code,
-        },
-        changes: [
-          { field: 'coupon', oldValue: editingCoupon.code, newValue: couponData.code }
-        ]
+        entity: { type: 'coupon', id: editingCoupon.id, label: couponData.code },
+        changes: [{ field: 'coupon', oldValue: editingCoupon.code, newValue: couponData.code }]
       });
-      showToast('Cupón actualizado correctamente', 'success');
+      showToast('success', 'Cupón actualizado correctamente');
     } else {
-      const newCoupon = addCoupon(couponData);
+      const newCoupon = await createCoupon(couponData);
       auditLog({
         action: 'COUPON_CREATED',
-        entity: {
-          type: 'coupon',
-          id: newCoupon.id,
-          label: newCoupon.code,
-        },
+        entity: { type: 'coupon', id: newCoupon.id, label: newCoupon.code },
         changes: []
       });
-      showToast('Cupón creado correctamente', 'success');
+      showToast('success', 'Cupón creado correctamente');
     }
-    
-    setIsDialogOpen(false);
-  };
 
+    setIsDialogOpen(false);
+
+  } catch (err: any) {
+    // Esperamos tu ApiError con shape { message, details? }
+    // Recomendación BE: details.fieldErrors = { code: "...", value: "...", ... }
+    const fieldErrors = err?.details?.fieldErrors;
+
+    if (fieldErrors && typeof fieldErrors === "object") {
+      setErrors(fieldErrors);
+      showToast('fail', err?.message ?? 'Revisa el formulario');
+      return;
+    }
+
+    // Duplicado típico: code ya existe
+    // Recomendación BE: status 409 + fieldErrors.code
+    showToast('fail', err?.message ?? 'No se pudo guardar el cupón');
+  }
+};
   const handleToggle = (coupon: Coupon) => {
     toggleCoupon(coupon.id);
     auditLog({
@@ -255,7 +258,7 @@ export default function Coupons() {
         { field: 'isActive', oldValue: coupon.isActive.toString(), newValue: (!coupon.isActive).toString() }
       ]
     });
-    showToast(`Cupón ${!coupon.isActive ? 'activado' : 'desactivado'}`, 'success');
+    showToast('success',`Cupón ${!coupon.isActive ? 'activado' : 'desactivado'}`);
   };
 
   const handleDelete = (coupon: Coupon) => {
@@ -270,7 +273,7 @@ export default function Coupons() {
         },
         changes: []
       });
-      showToast('Cupón eliminado', 'success');
+      showToast('success','Cupón eliminado correctamente');
     }
   };
 
@@ -288,7 +291,7 @@ export default function Coupons() {
           { field: 'usedCount', oldValue: coupon.usedCount.toString(), newValue: '0' }
         ]
       });
-      showToast('Contador reiniciado', 'success');
+      showToast('success','Contador reiniciado correctamente');
     }
   };
 

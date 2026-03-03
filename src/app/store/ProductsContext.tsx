@@ -146,33 +146,29 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const createProduct = useCallback(
-    async (payload: CreateProductPayload) => {
-      const res = await productsApi.createProduct(payload);
-      const created = await productsApi.getProduct(res.id);
-      dispatch({ type: "UPSERT", payload: created });
-      writeCache([created, ...state.products]);
-      audit.auditLog({
-        action: "PRODUCT_CREATED",
-        entity: { type: "product", id: created.id, label: created.name },
-      });
-    },
-    [state.products, audit]
-  );
+const createProduct = useCallback(
+  async (payload: CreateProductPayload) => {
+    const res = await productsApi.createProduct(payload);
+    const fetched = await productsApi.getProduct(res.id ?? (res as any).data?.id);
+    const created = (fetched as any).data ?? fetched;
+    dispatch({ type: "UPSERT", payload: created });
+    writeCache([created, ...state.products]);
+  },
+  [state.products, audit]
+);
 
-  const updateProduct = useCallback(
-    async (id: string, payload: UpdateProductPayload) => {
-      await productsApi.updateProduct(id, payload);
-      const updated = await productsApi.getProduct(id);
-      dispatch({ type: "UPSERT", payload: updated });
-      writeCache(state.products.map((p) => (p.id === id ? updated : p)));
-      audit.auditLog({
-        action: "PRODUCT_UPDATED",
-        entity: { type: "product", id: updated.id, label: updated.name },
-      });
-    },
-    [state.products, audit]
-  );
+const updateProduct = useCallback(
+  async (id: string, payload: UpdateProductPayload) => {
+    await productsApi.updateProduct(id, payload);
+    const res = await productsApi.getProduct(id);
+    // Desenvolver si viene envuelto en { data: ... }
+    const updated = (res as any).data ?? res;
+    console.log('[context.updateProduct] updated:', updated.id, updated.name);
+    dispatch({ type: "UPSERT", payload: updated });
+    writeCache(state.products.map((p) => (p.id === id ? updated : p)));
+  },
+  [state.products, audit]
+);
 
   const deleteProduct = useCallback(
     async (id: string) => {

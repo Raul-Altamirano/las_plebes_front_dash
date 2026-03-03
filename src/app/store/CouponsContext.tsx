@@ -1,142 +1,82 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { Coupon } from '../types/promotion';
-import { mockCoupons } from '../data/mockPromotions';
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { Coupon } from "../types/promotion";
+import { couponsApi, type CreateCouponDto } from "../../api/coupons.api";
 
-interface CouponsContextValue {
+type CouponsContextValue = {
   coupons: Coupon[];
-  addCoupon: (coupon: Omit<Coupon, 'id' | 'createdAt' | 'updatedAt' | 'usedCount'>) => Coupon;
-  updateCoupon: (id: string, updates: Partial<Coupon>) => void;
-  deleteCoupon: (id: string) => void;
-  toggleCoupon: (id: string) => void;
-  getCoupon: (id: string) => Coupon | undefined;
-  getCouponByCode: (code: string) => Coupon | undefined;
-  getActiveCoupons: () => Coupon[];
-  resetUsageCount: (id: string) => void;
-  incrementUsage: (id: string) => void;
-}
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+  createCoupon: (dto: CreateCouponDto) => Promise<Coupon>;
+  updateCoupon: (id: string, patch: Partial<Coupon>) => Promise<Coupon>;
+  deleteCoupon: (id: string) => Promise<void>;
+  redeemCoupon: (code: string, extra?: { customerId?: string; orderId?: string; subtotal?: number }) => Promise<any>;
+};
 
-const CouponsContext = createContext<CouponsContextValue | undefined>(undefined);
+const CouponsContext = createContext<CouponsContextValue | null>(null);
 
-const STORAGE_KEY = 'ecommerce_coupons';
+export function CouponsProvider({ children }: { children: React.ReactNode }) {
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export function CouponsProvider({ children }: { children: ReactNode }) {
-  const [coupons, setCoupons] = useState<Coupon[]>(() => {
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-      // Si no hay datos, cargar mock data
-      return mockCoupons;
-    } catch (error) {
-      console.error('Error loading coupons from localStorage:', error);
-      return mockCoupons;
+      const data = await couponsApi.list();
+      setCoupons(data);
+    } catch (e: any) {
+      setError(e?.message ?? "No se pudieron cargar cupones");
+    } finally {
+      setLoading(false);
     }
-  });
+  };
 
-  // Persistir en localStorage cuando cambie
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(coupons));
-    } catch (error) {
-      console.error('Error saving coupons to localStorage:', error);
-    }
-  }, [coupons]);
+    void refresh();
+  }, []);
 
-  const addCoupon = (coupon: Omit<Coupon, 'id' | 'createdAt' | 'updatedAt' | 'usedCount'>): Coupon => {
-    const now = new Date().toISOString();
-    const newCoupon: Coupon = {
-      ...coupon,
-      id: `coupon-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      usedCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    setCoupons(prev => [...prev, newCoupon]);
-    return newCoupon;
+  const createCoupon = async (dto: CreateCouponDto) => {
+    setError(null);
+    const created = await couponsApi.create(dto);
+    await refresh();
+    return created;
   };
 
-  const updateCoupon = (id: string, updates: Partial<Coupon>) => {
-    setCoupons(prev =>
-      prev.map(coupon =>
-        coupon.id === id
-          ? { ...coupon, ...updates, updatedAt: new Date().toISOString() }
-          : coupon
-      )
-    );
+  const updateCoupon = async (id: string, patch: Partial<Coupon>) => {
+    setError(null);
+    const updated = await couponsApi.update(id, patch);
+    setCoupons((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    return updated;
   };
 
-  const deleteCoupon = (id: string) => {
-    setCoupons(prev => prev.filter(coupon => coupon.id !== id));
+  const deleteCoupon = async (id: string) => {
+    setError(null);
+    await couponsApi.remove(id);
+    setCoupons((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const toggleCoupon = (id: string) => {
-    setCoupons(prev =>
-      prev.map(coupon =>
-        coupon.id === id
-          ? { ...coupon, isActive: !coupon.isActive, updatedAt: new Date().toISOString() }
-          : coupon
-      )
-    );
+  const redeemCoupon = async (
+    code: string,
+    extra?: { customerId?: string; orderId?: string; subtotal?: number }
+  ) => {
+    setError(null);
+    const res = await couponsApi.redeem({ code, ...extra });
+    await refresh();
+    return res;
   };
 
-  const getCoupon = (id: string): Coupon | undefined => {
-    return coupons.find(coupon => coupon.id === id);
-  };
-
-  const getCouponByCode = (code: string): Coupon | undefined => {
-    return coupons.find(coupon => coupon.code.toUpperCase() === code.toUpperCase());
-  };
-
-  const getActiveCoupons = (): Coupon[] => {
-    return coupons.filter(coupon => coupon.isActive);
-  };
-
-  const resetUsageCount = (id: string) => {
-    setCoupons(prev =>
-      prev.map(coupon =>
-        coupon.id === id
-          ? { ...coupon, usedCount: 0, updatedAt: new Date().toISOString() }
-          : coupon
-      )
-    );
-  };
-
-  const incrementUsage = (id: string) => {
-    setCoupons(prev =>
-      prev.map(coupon =>
-        coupon.id === id
-          ? { ...coupon, usedCount: coupon.usedCount + 1, updatedAt: new Date().toISOString() }
-          : coupon
-      )
-    );
-  };
-
-  const value: CouponsContextValue = {
-    coupons,
-    addCoupon,
-    updateCoupon,
-    deleteCoupon,
-    toggleCoupon,
-    getCoupon,
-    getCouponByCode,
-    getActiveCoupons,
-    resetUsageCount,
-    incrementUsage,
-  };
-
-  return (
-    <CouponsContext.Provider value={value}>
-      {children}
-    </CouponsContext.Provider>
+  const value = useMemo(
+    () => ({ coupons, loading, error, refresh, createCoupon, updateCoupon, deleteCoupon, redeemCoupon }),
+    [coupons, loading, error]
   );
+
+  return <CouponsContext.Provider value={value}>{children}</CouponsContext.Provider>;
 }
 
 export function useCoupons() {
-  const context = useContext(CouponsContext);
-  if (!context) {
-    throw new Error('useCoupons must be used within a CouponsProvider');
-  }
-  return context;
+  const ctx = useContext(CouponsContext);
+  if (!ctx) throw new Error("useCoupons must be used within CouponsProvider");
+  return ctx;
 }
