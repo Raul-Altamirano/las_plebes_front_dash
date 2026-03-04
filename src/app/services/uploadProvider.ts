@@ -11,7 +11,10 @@ export type UploadOptions = {
   productId?: string;
   categoryId?: string;
   sku?: string;
+  variantSku?: string; // ← agrega
 };
+
+
 
 export type PendingImage = {
   id: string;
@@ -32,12 +35,14 @@ export async function getPresignedUrls(
     '/uploads/signed-urls',
     {
       method: 'POST',
-      body: JSON.stringify({
-        files,
-        productId:  options?.productId  ?? null,
-        categoryId: options?.categoryId ?? null,
-        sku:        options?.sku        ?? null,
-      }),
+// En getPresignedUrls, agrega al body:
+body: JSON.stringify({
+  files,
+  productId:  options?.productId  ?? null,
+  categoryId: options?.categoryId ?? null,
+  sku:        options?.sku        ?? null,
+  variantSku: options?.variantSku ?? null, // ← agrega
+}),
       label: 'uploads.signedUrls',
     }
   );

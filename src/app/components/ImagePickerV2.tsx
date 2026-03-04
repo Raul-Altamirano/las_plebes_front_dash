@@ -19,11 +19,13 @@ interface ImagePickerV2Props {
   images: ProductImage[]; onChange: (images: ProductImage[]) => void; error?: string;
   disabled?: boolean; maxImages?: number; productId?: string; categoryId?: string | null; sku?: string;
   uploadRef?: React.MutableRefObject<(() => Promise<ProductImage[] | null>) | null>;
+    variantSku?: string;
+
 }
 
 const MAX_IMAGES = 6;
 
-export function ImagePickerV2({ images, onChange, error, disabled = false, maxImages = MAX_IMAGES, productId, categoryId, sku, uploadRef }: ImagePickerV2Props) {
+export function ImagePickerV2({ images, onChange, error, disabled = false, maxImages = MAX_IMAGES, productId, categoryId, sku, uploadRef,variantSku  }: ImagePickerV2Props) {
   const { hasPermission } = useAuth();
   const { auditLog } = useAudit();
 
@@ -56,7 +58,7 @@ export function ImagePickerV2({ images, onChange, error, disabled = false, maxIm
     if (!hasNewImages && !hasRemovedImages && !hasPrimaryChange) return null;
     if (!hasNewImages) return uploaded.map(({ _pending, ...rest }) => rest as ProductImage);
     setUploadingIds(new Set(pending.map(p => p.id)));
-    const uploadedFiles = await uploadFilesToS3(pending.map(p => p._file), pending, { productId, categoryId: categoryId ?? undefined, sku });
+    const uploadedFiles = await uploadFilesToS3(pending.map(p => p._file), pending, { productId, categoryId: categoryId ?? undefined, sku, variantSku });
     let pendingIndex = 0;
     const result = allImages.map((img) => {
       if (!isPending(img)) return img;

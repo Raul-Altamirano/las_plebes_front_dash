@@ -8,14 +8,41 @@ import { useAuth } from '../store/AuthContext';
 import { useAudit } from '../store/AuditContext';
 import { ImagePickerV2 } from '../components/ImagePickerV2';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { VariantEditor } from '../components/VariantEditor';
 import { RequirePermission } from '../components/RequirePermission';
+
+import { VariantEditor } from '../components/VariantEditor';
+import { VariantImagesSection } from '../components/VariantImagesSection'; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
 import { validateProductDraft, validateProductActive } from '../utils/validation';
 import { getEffectiveCost, calculateUnitProfit, calculateMarginPercent, formatCurrency, formatPercent } from '../utils/costHelpers';
 import type { Product, ProductStatus, ProductImage, ProductVariant } from '../types/product';
 import { Switch } from '../components/ui/switch';
 import { Label } from '../components/ui/label';
 
+const haveVariantsChanged = (
+  original: ProductVariant[] | undefined,
+  current: ProductVariant[] | undefined
+): boolean => {
+  const a = original ?? [];
+  const b = current ?? [];
+  
+  if (a.length !== b.length) return true;
+  
+  return b.some((variant, i) => {
+    const orig = a[i];
+    if (!orig) return true;
+    return (
+      variant.id    !== orig.id    ||
+      variant.sku   !== orig.sku   ||
+      variant.size  !== orig.size  ||
+      variant.color !== orig.color ||
+      variant.price !== orig.price ||
+      variant.stock !== orig.stock ||
+      variant.cost  !== orig.cost  ||
+      JSON.stringify((variant.images ?? []).map(i => i.id).sort()) !==
+      JSON.stringify((orig.images    ?? []).map(i => i.id).sort())
+    );
+  });
+};
 
 export function ProductForm() {
   const { id } = useParams();
@@ -107,6 +134,14 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
     }
   };
 
+  const handleVariantImagesChange = (variantId: string, images: ProductImage[]) => {
+    const updatedVariants = (formData.variants || []).map(variant =>
+      variant.id === variantId ? { ...variant, images } : variant
+    );
+    setFormData(prev => ({ ...prev, variants: updatedVariants }));
+    setIsDirty(true);
+  };
+
   const validateForm = (targetStatus: ProductStatus): boolean => {
     const productToValidate = { ...formData, status: targetStatus };
     
@@ -181,7 +216,9 @@ console.log('[handleSubmit] diff:', {
   trackCost:   formData.trackCost   !== originalProduct?.trackCost,
   hasVariants: formData.hasVariants !== originalProduct?.hasVariants,
 });
-if (isEdit && !hasFieldChanges && !hasImageChanges) {
+const hasVariantChanges = haveVariantsChanged(originalProduct?.variants, formData.variants);
+
+if (isEdit && !hasFieldChanges && !hasImageChanges && !hasVariantChanges) {
   showToast('info', 'No hay cambios que guardar');
   setIsLoading(false);
   return;
@@ -772,7 +809,19 @@ try {
           </div>
         </div>
       </div>
-
+          {/* Imágenes por Variante */}
+          {formData.hasVariants && (formData.variants || []).length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+              <h3 className="text-base font-semibold text-gray-900">Imágenes por variante</h3>
+              <VariantImagesSection
+                hasVariants={formData.hasVariants || false}
+                variants={formData.variants || []}
+                productImages={formData.images || []}
+                onVariantImagesChange={handleVariantImagesChange}
+                productId={id}
+              />
+            </div>
+          )}
       {/* Actions */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
         <button
