@@ -12,10 +12,10 @@ export interface ProductImage {
 
 export interface ProductVariant {
   id: string;
-  productId: string;
+  productId?: string;
   sku?: string;
-  size?: string;
-  color?: string;
+  size?: string;       // mantener para compatibilidad con BE
+  color?: string;      // mantener para compatibilidad con BE
   price?: number;
   cost?: number;
   stock: number;

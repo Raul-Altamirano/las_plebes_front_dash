@@ -1,45 +1,68 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router';
-import { ArrowLeft, Save, Loader2, AlertCircle, ShieldAlert, DollarSign, TrendingUp, Info } from 'lucide-react';
-import { useProductsStore } from '../store/ProductsContext';
-import { useCategories } from '../store/CategoryContext';
-import { useToast } from '../store/ToastContext';
-import { useAuth } from '../store/AuthContext';
-import { useAudit } from '../store/AuditContext';
-import { ImagePickerV2 } from '../components/ImagePickerV2';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { RequirePermission } from '../components/RequirePermission';
+import { useState, useEffect, useRef } from "react";
+import { useParams, Link, useNavigate } from "react-router";
+import {
+  ArrowLeft,
+  Save,
+  Loader2,
+  AlertCircle,
+  ShieldAlert,
+  DollarSign,
+  TrendingUp,
+  Info,
+} from "lucide-react";
+import { useProductsStore } from "../store/ProductsContext";
+import { useCategories } from "../store/CategoryContext";
+import { useToast } from "../store/ToastContext";
+import { useAuth } from "../store/AuthContext";
+import { useAudit } from "../store/AuditContext";
+import { ImagePickerV2 } from "../components/ImagePickerV2";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { RequirePermission } from "../components/RequirePermission";
 
-import { VariantEditor } from '../components/VariantEditor';
-import { VariantImagesSection } from '../components/VariantImagesSection'; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
-import { validateProductDraft, validateProductActive } from '../utils/validation';
-import { getEffectiveCost, calculateUnitProfit, calculateMarginPercent, formatCurrency, formatPercent } from '../utils/costHelpers';
-import type { Product, ProductStatus, ProductImage, ProductVariant } from '../types/product';
-import { Switch } from '../components/ui/switch';
-import { Label } from '../components/ui/label';
+import { VariantEditor } from "../components/VariantEditor";
+import { VariantImagesSection } from "../components/VariantImagesSection"; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
+import {
+  validateProductDraft,
+  validateProductActive,
+} from "../utils/validation";
+import {
+  getEffectiveCost,
+  calculateUnitProfit,
+  calculateMarginPercent,
+  formatCurrency,
+  formatPercent,
+} from "../utils/costHelpers";
+import type {
+  Product,
+  ProductStatus,
+  ProductImage,
+  ProductVariant,
+} from "../types/product";
+import { Switch } from "../components/ui/switch";
+import { Label } from "../components/ui/label";
 
 const haveVariantsChanged = (
   original: ProductVariant[] | undefined,
-  current: ProductVariant[] | undefined
+  current: ProductVariant[] | undefined,
 ): boolean => {
   const a = original ?? [];
   const b = current ?? [];
-  
+
   if (a.length !== b.length) return true;
-  
+
   return b.some((variant, i) => {
     const orig = a[i];
     if (!orig) return true;
     return (
-      variant.id    !== orig.id    ||
-      variant.sku   !== orig.sku   ||
-      variant.size  !== orig.size  ||
+      variant.id !== orig.id ||
+      variant.sku !== orig.sku ||
+      variant.size !== orig.size ||
       variant.color !== orig.color ||
       variant.price !== orig.price ||
       variant.stock !== orig.stock ||
-      variant.cost  !== orig.cost  ||
-      JSON.stringify((variant.images ?? []).map(i => i.id).sort()) !==
-      JSON.stringify((orig.images    ?? []).map(i => i.id).sort())
+      variant.cost !== orig.cost ||
+      JSON.stringify((variant.images ?? []).map((i) => i.id).sort()) !==
+        JSON.stringify((orig.images ?? []).map((i) => i.id).sort())
     );
   });
 };
@@ -47,45 +70,45 @@ const haveVariantsChanged = (
 export function ProductForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { products, createProduct, updateProduct, getById } = useProductsStore();
-const { categories, getById: getCategoryById } = useCategories();
+  const { products, createProduct, updateProduct, getById } =
+    useProductsStore();
+  const { categories, getById: getCategoryById } = useCategories();
   const { showToast } = useToast();
   const { currentUser, hasPermission } = useAuth();
   const { auditLog } = useAudit();
-  
+
   const isEdit = Boolean(id);
   const [isLoading, setIsLoading] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
   // Verificar permisos
-  const canUpdateProduct = hasPermission('product:update');
-  const canUpdateInventory = hasPermission('inventory:update');
-  const canPublish = hasPermission('product:publish');
-  const canUploadMedia = hasPermission('media:upload');
-const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
-
+  const canUpdateProduct = hasPermission("product:update");
+  const canUpdateInventory = hasPermission("inventory:update");
+  const canPublish = hasPermission("product:publish");
+  const canUploadMedia = hasPermission("media:upload");
+  const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
 
   // Modo "stock-only" para rol OPS
   const isStockOnlyMode = !canUpdateProduct && canUpdateInventory;
 
   // Get active categories
-const activeCategories = categories.filter(c => c.status === 'ACTIVE');
+  const activeCategories = categories.filter((c) => c.status === "ACTIVE");
 
   // Form state
   const [formData, setFormData] = useState<Partial<Product>>({
-    name: '',
-    sku: '',
+    name: "",
+    sku: "",
     price: 0,
     stock: 0,
-    status: 'DRAFT',
+    status: "DRAFT",
     categoryId: activeCategories.length > 0 ? activeCategories[0].id : null,
-    descriptionShort: '',
+    descriptionShort: "",
     images: [],
     hasVariants: false,
     variants: [],
     cost: 0,
-    trackCost: true
+    trackCost: true,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -93,40 +116,49 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
 
   // Producto original (para detectar cambios y audit)
   const [originalProduct, setOriginalProduct] = useState<Product | null>(null);
+const [initialized, setInitialized] = useState(false);
 
   // Load product data in edit mode
-  useEffect(() => {
-    if (isEdit && id) {
-      const product = getById(id);
-      if (product) {
-        setFormData(product);
-        setOriginalProduct(product);
-      } else {
-        showToast('error', 'Producto no encontrado');
-        navigate('/products');
-      }
+useEffect(() => {
+  if (isEdit && id && !initialized) {
+    const product = getById(id);
+    if (product) {
+      setFormData(product);
+      setOriginalProduct(product);
+      setInitialized(true);
+    } else {
+      showToast('error', 'Producto no encontrado');
+      navigate('/products');
     }
-  }, [id, isEdit, getById, navigate, showToast]);
+  }
+}, [id, isEdit, initialized, getById, navigate, showToast]);
 
   // Track form changes
   useEffect(() => {
     if (isEdit) {
       const original = getById(id!);
       if (original) {
-        const hasChanges = JSON.stringify(formData) !== JSON.stringify(original);
+        console.log("[useEffect] original.hasVariants:", original.hasVariants); // ← agrega
+        console.log("[useEffect] formData.hasVariants:", formData.hasVariants); // ← agrega
+
+        const hasChanges =
+          JSON.stringify(formData) !== JSON.stringify(original);
         setIsDirty(hasChanges);
       }
     } else {
-      const hasData = formData.name || formData.sku || (formData.images && formData.images.length > 0);
+      const hasData =
+        formData.name ||
+        formData.sku ||
+        (formData.images && formData.images.length > 0);
       setIsDirty(Boolean(hasData));
     }
   }, [formData, isEdit, id, getById]);
 
   const handleChange = (field: keyof Product, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error for this field
     if (errors[field]) {
-      setErrors(prev => {
+      setErrors((prev) => {
         const newErrors = { ...prev };
         delete newErrors[field];
         return newErrors;
@@ -134,131 +166,145 @@ const activeCategories = categories.filter(c => c.status === 'ACTIVE');
     }
   };
 
-  const handleVariantImagesChange = (variantId: string, images: ProductImage[]) => {
-    const updatedVariants = (formData.variants || []).map(variant =>
-      variant.id === variantId ? { ...variant, images } : variant
+  const handleVariantImagesChange = (
+    variantId: string,
+    images: ProductImage[],
+  ) => {
+    const updatedVariants = (formData.variants || []).map((variant) =>
+      variant.id === variantId ? { ...variant, images } : variant,
     );
-    setFormData(prev => ({ ...prev, variants: updatedVariants }));
+    setFormData((prev) => ({ ...prev, variants: updatedVariants }));
     setIsDirty(true);
   };
 
   const validateForm = (targetStatus: ProductStatus): boolean => {
     const productToValidate = { ...formData, status: targetStatus };
-    
-    const validation = targetStatus === 'DRAFT'
-      ? validateProductDraft(productToValidate, products, id)
-      : validateProductActive(productToValidate, products, id);
+
+    const validation =
+      targetStatus === "DRAFT"
+        ? validateProductDraft(productToValidate, products, id)
+        : validateProductActive(productToValidate, products, id);
 
     // Convert validation errors to record
     const errorRecord: Record<string, string> = {};
-    validation.errors.forEach(err => {
+    validation.errors.forEach((err) => {
       errorRecord[err.field] = err.message;
     });
 
     const warningRecord: Record<string, string> = {};
-    validation.warnings.forEach(warn => {
+    validation.warnings.forEach((warn) => {
       warningRecord[warn.field] = warn.message;
     });
 
     setErrors(errorRecord);
     setWarnings(warningRecord);
 
+    console.log("[validateForm] formData.hasVariants:", formData.hasVariants); // ← agrega
+    console.log("[validateForm] errors:", errorRecord); // ← agrega
+
     return validation.isValid;
   };
 
   const handleSubmit = async (saveAsDraft: boolean = false) => {
-  const targetStatus = saveAsDraft ? 'DRAFT' : (formData.status || 'ACTIVE');
+    const targetStatus = saveAsDraft ? "DRAFT" : formData.status || "ACTIVE";
 
-  if (targetStatus === 'ACTIVE' && !canPublish && originalProduct?.status !== 'ACTIVE') {
-    showToast('error', 'No tienes permiso para publicar productos');
-    return;
-  }
+    if (
+      targetStatus === "ACTIVE" &&
+      !canPublish &&
+      originalProduct?.status !== "ACTIVE"
+    ) {
+      showToast("error", "No tienes permiso para publicar productos");
+      return;
+    }
 
-  if (!validateForm(targetStatus)) {
-    showToast('error', 'Por favor corrige los errores antes de guardar');
-    return;
-  }
+    if (!validateForm(targetStatus)) {
+      showToast("error", "Por favor corrige los errores antes de guardar");
+      return;
+    }
 
-  setIsLoading(true);
+    setIsLoading(true);
 
+    // ─── Candado: detectar cambios ────────────────────────────────────────────
+    const uploadedImages = uploadRef.current ? await uploadRef.current() : null;
+    const hasImageChanges = uploadedImages !== null;
 
-// ─── Candado: detectar cambios ────────────────────────────────────────────
-const uploadedImages = uploadRef.current ? await uploadRef.current() : null;
-const hasImageChanges = uploadedImages !== null;
+    const hasFieldChanges =
+      isEdit && originalProduct
+        ? formData.name !== originalProduct.name ||
+          formData.sku !== originalProduct.sku ||
+          formData.price !== originalProduct.price ||
+          formData.stock !== originalProduct.stock ||
+          formData.categoryId !== originalProduct.categoryId ||
+          formData.description !== originalProduct.description ||
+          formData.cost !== originalProduct.cost ||
+          formData.status !== originalProduct.status ||
+          formData.trackCost !== originalProduct.trackCost ||
+          formData.hasVariants !== originalProduct.hasVariants
+        : true; // Si es creación, siempre hay "cambios"
+    console.log("[handleSubmit] isEdit:", isEdit);
+    console.log("[handleSubmit] hasImageChanges:", hasImageChanges);
+    console.log("[handleSubmit] uploadedImages:", uploadedImages);
+    console.log("[handleSubmit] hasFieldChanges:", hasFieldChanges);
+    console.log("[handleSubmit] formData:", formData);
+    console.log("[handleSubmit] originalProduct:", originalProduct);
+    console.log("[handleSubmit] diff:", {
+      name: formData.name !== originalProduct?.name,
+      sku: formData.sku !== originalProduct?.sku,
+      price: formData.price !== originalProduct?.price,
+      stock: formData.stock !== originalProduct?.stock,
+      categoryId: formData.categoryId !== originalProduct?.categoryId,
+      description: formData.description !== originalProduct?.description,
+      cost: formData.cost !== originalProduct?.cost,
+      status: formData.status !== originalProduct?.status,
+      trackCost: formData.trackCost !== originalProduct?.trackCost,
+      hasVariants: formData.hasVariants !== originalProduct?.hasVariants,
+    });
+    const hasVariantChanges = haveVariantsChanged(
+      originalProduct?.variants,
+      formData.variants,
+    );
 
-const hasFieldChanges = isEdit && originalProduct ? (
-  formData.name        !== originalProduct.name        ||
-  formData.sku         !== originalProduct.sku         ||
-  formData.price       !== originalProduct.price       ||
-  formData.stock       !== originalProduct.stock       ||
-  formData.categoryId  !== originalProduct.categoryId  ||
-  formData.description !== originalProduct.description ||
-  formData.cost        !== originalProduct.cost        ||
-  formData.status      !== originalProduct.status      ||
-  formData.trackCost   !== originalProduct.trackCost   ||
-  formData.hasVariants !== originalProduct.hasVariants
-) : true; // Si es creación, siempre hay "cambios"
-console.log('[handleSubmit] isEdit:', isEdit);
-console.log('[handleSubmit] hasImageChanges:', hasImageChanges);
-console.log('[handleSubmit] uploadedImages:', uploadedImages);
-console.log('[handleSubmit] hasFieldChanges:', hasFieldChanges);
-console.log('[handleSubmit] formData:', formData);
-console.log('[handleSubmit] originalProduct:', originalProduct);
-console.log('[handleSubmit] diff:', {
-  name:        formData.name        !== originalProduct?.name,
-  sku:         formData.sku         !== originalProduct?.sku,
-  price:       formData.price       !== originalProduct?.price,
-  stock:       formData.stock       !== originalProduct?.stock,
-  categoryId:  formData.categoryId  !== originalProduct?.categoryId,
-  description: formData.description !== originalProduct?.description,
-  cost:        formData.cost        !== originalProduct?.cost,
-  status:      formData.status      !== originalProduct?.status,
-  trackCost:   formData.trackCost   !== originalProduct?.trackCost,
-  hasVariants: formData.hasVariants !== originalProduct?.hasVariants,
-});
-const hasVariantChanges = haveVariantsChanged(originalProduct?.variants, formData.variants);
+    if (isEdit && !hasFieldChanges && !hasImageChanges && !hasVariantChanges) {
+      showToast("info", "No hay cambios que guardar");
+      setIsLoading(false);
+      return;
+    }
 
-if (isEdit && !hasFieldChanges && !hasImageChanges && !hasVariantChanges) {
-  showToast('info', 'No hay cambios que guardar');
-  setIsLoading(false);
-  return;
-}
+    try {
+      const basePayload = {
+        name: formData.name!,
+        sku: formData.sku!,
+        price: formData.price || 0,
+        stock: formData.stock || 0,
+        status: targetStatus,
+        categoryId: formData.categoryId!,
+        description: formData.description,
+        images: uploadedImages ?? formData.images ?? [],
+        updatedAt: new Date().toISOString(),
+        isArchived: originalProduct?.isArchived || false,
+        hasVariants: formData.hasVariants || false,
+        variants: formData.variants || [],
+        cost: formData.cost,
+        trackCost: formData.trackCost !== undefined ? formData.trackCost : true,
+      };
 
-try {
-  const basePayload = {
-    name:        formData.name!,
-    sku:         formData.sku!,
-    price:       formData.price       || 0,
-    stock:       formData.stock       || 0,
-    status:      targetStatus,
-    categoryId:  formData.categoryId!,
-    description: formData.description,
-    images:      uploadedImages ?? formData.images ?? [],
-    updatedAt:   new Date().toISOString(),
-    isArchived:  originalProduct?.isArchived || false,
-    hasVariants: formData.hasVariants || false,
-    variants:    formData.variants    || [],
-    cost:        formData.cost,
-    trackCost:   formData.trackCost !== undefined ? formData.trackCost : true,
+      if (isEdit) {
+        await updateProduct(id!, basePayload);
+        showToast("success", "Producto actualizado correctamente");
+      } else {
+        await createProduct(basePayload);
+        showToast("success", "Producto creado correctamente");
+      }
+
+      setIsDirty(false);
+      navigate("/products");
+    } catch (error) {
+      console.error("[handleSubmit] Error:", error);
+      showToast("error", "Error al guardar el producto");
+    } finally {
+      setIsLoading(false);
+    }
   };
-
-  if (isEdit) {
-    await updateProduct(id!, basePayload);
-    showToast('success', 'Producto actualizado correctamente');
-  } else {
-    await createProduct(basePayload);
-    showToast('success', 'Producto creado correctamente');
-  }
-
-  setIsDirty(false);
-  navigate('/products');
-} catch (error) {
-  console.error('[handleSubmit] Error:', error);
-  showToast('error', 'Error al guardar el producto');
-} finally {
-  setIsLoading(false);
-}
-};
 
   // Submit para modo stock-only
   const handleStockOnlySubmit = async () => {
@@ -266,41 +312,45 @@ try {
 
     // Validar que el stock sea válido
     if (formData.stock === undefined || formData.stock < 0) {
-      setErrors({ stock: 'El stock debe ser mayor o igual a 0' });
-      showToast('error', 'Por favor ingresa un stock válido');
+      setErrors({ stock: "El stock debe ser mayor o igual a 0" });
+      showToast("error", "Por favor ingresa un stock válido");
       return;
     }
 
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     try {
       const productData: Product = {
         ...originalProduct,
         stock: formData.stock,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
 
       updateProduct(productData);
-      
+
       // Registrar audit log específico de ajuste de stock
       auditLog({
-        action: 'STOCK_ADJUSTED',
+        action: "STOCK_ADJUSTED",
         entity: {
-          type: 'product',
+          type: "product",
           id: productData.id,
           label: productData.name,
         },
         changes: [
-          { field: 'stock', oldValue: originalProduct.stock.toString(), newValue: formData.stock.toString() }
-        ]
+          {
+            field: "stock",
+            oldValue: originalProduct.stock.toString(),
+            newValue: formData.stock.toString(),
+          },
+        ],
       });
-      
-      showToast('success', 'Stock actualizado correctamente');
+
+      showToast("success", "Stock actualizado correctamente");
       setIsDirty(false);
-      navigate('/products');
+      navigate("/products");
     } catch (error) {
-      showToast('error', 'Error al actualizar el stock');
+      showToast("error", "Error al actualizar el stock");
     } finally {
       setIsLoading(false);
     }
@@ -310,14 +360,14 @@ try {
     if (isDirty) {
       setShowDiscardDialog(true);
     } else {
-      navigate('/products');
+      navigate("/products");
     }
   };
 
   const handleConfirmDiscard = () => {
     setShowDiscardDialog(false);
     setIsDirty(false);
-    navigate('/products');
+    navigate("/products");
   };
 
   // MODO STOCK-ONLY (para usuarios OPS)
@@ -326,7 +376,9 @@ try {
       <div className="space-y-6">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Link to="/products" className="hover:text-gray-900">Productos</Link>
+          <Link to="/products" className="hover:text-gray-900">
+            Productos
+          </Link>
           <span>/</span>
           <span className="text-gray-900">Ajustar stock</span>
         </div>
@@ -340,7 +392,9 @@ try {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Ajustar Stock</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              Ajustar Stock
+            </h1>
             <p className="text-sm text-gray-600 mt-1">{formData.name}</p>
           </div>
         </div>
@@ -350,7 +404,10 @@ try {
           <ShieldAlert className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-800">
             <p className="font-medium">Modo limitado de edición</p>
-            <p className="mt-1">Tu rol solo te permite ajustar el stock de productos. Para modificar otros campos, contacta a un administrador.</p>
+            <p className="mt-1">
+              Tu rol solo te permite ajustar el stock de productos. Para
+              modificar otros campos, contacta a un administrador.
+            </p>
           </div>
         </div>
 
@@ -359,20 +416,34 @@ try {
           {/* Read-only fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-gray-200">
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Nombre</label>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                Nombre
+              </label>
               <p className="text-gray-900">{originalProduct.name}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">SKU</label>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                SKU
+              </label>
               <p className="text-gray-900">{originalProduct.sku}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Precio</label>
-              <p className="text-gray-900">${originalProduct.price.toFixed(2)}</p>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                Precio
+              </label>
+              <p className="text-gray-900">
+                ${originalProduct.price.toFixed(2)}
+              </p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Categoría</label>
-              <p className="text-gray-900">{originalProduct.categoryId && getCategoryById(originalProduct.categoryId)?.name || 'Sin categoría'}</p>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                Categoría
+              </label>
+              <p className="text-gray-900">
+                {(originalProduct.categoryId &&
+                  getCategoryById(originalProduct.categoryId)?.name) ||
+                  "Sin categoría"}
+              </p>
             </div>
           </div>
 
@@ -385,9 +456,13 @@ try {
               type="number"
               min="0"
               value={formData.stock || 0}
-              onChange={(e) => handleChange('stock', parseInt(e.target.value) || 0)}
+              onChange={(e) =>
+                handleChange("stock", parseInt(e.target.value) || 0)
+              }
               className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                errors.stock ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                errors.stock
+                  ? "border-red-300 focus:ring-red-500"
+                  : "border-gray-300"
               }`}
               placeholder="0"
             />
@@ -451,9 +526,11 @@ try {
     <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-600">
-        <Link to="/products" className="hover:text-gray-900">Productos</Link>
+        <Link to="/products" className="hover:text-gray-900">
+          Productos
+        </Link>
         <span>/</span>
-        <span className="text-gray-900">{isEdit ? 'Editar' : 'Nuevo'}</span>
+        <span className="text-gray-900">{isEdit ? "Editar" : "Nuevo"}</span>
       </div>
 
       {/* Header */}
@@ -466,10 +543,12 @@ try {
         </button>
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {isEdit ? 'Editar Producto' : 'Nuevo Producto'}
+            {isEdit ? "Editar Producto" : "Nuevo Producto"}
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            {isEdit ? `Editando: ${formData.name || 'Sin nombre'}` : 'Completa la información del producto'}
+            {isEdit
+              ? `Editando: ${formData.name || "Sin nombre"}`
+              : "Completa la información del producto"}
           </p>
         </div>
       </div>
@@ -480,7 +559,9 @@ try {
         <div className="space-y-6">
           {/* Basic Information */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-            <h3 className="text-base font-semibold text-gray-900">Información básica</h3>
+            <h3 className="text-base font-semibold text-gray-900">
+              Información básica
+            </h3>
 
             {/* Name */}
             <div>
@@ -489,10 +570,12 @@ try {
               </label>
               <input
                 type="text"
-                value={formData.name || ''}
-                onChange={(e) => handleChange('name', e.target.value)}
+                value={formData.name || ""}
+                onChange={(e) => handleChange("name", e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                  errors.name ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                  errors.name
+                    ? "border-red-300 focus:ring-red-500"
+                    : "border-gray-300"
                 }`}
                 placeholder="Ej: Botas Vaqueras Premium"
               />
@@ -511,10 +594,14 @@ try {
               </label>
               <input
                 type="text"
-                value={formData.sku || ''}
-                onChange={(e) => handleChange('sku', e.target.value.toUpperCase())}
+                value={formData.sku || ""}
+                onChange={(e) =>
+                  handleChange("sku", e.target.value.toUpperCase())
+                }
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                  errors.sku ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                  errors.sku
+                    ? "border-red-300 focus:ring-red-500"
+                    : "border-gray-300"
                 }`}
                 placeholder="Ej: BV-001-BRN"
               />
@@ -532,14 +619,18 @@ try {
                 Categoría <span className="text-red-500">*</span>
               </label>
               <select
-                value={formData.categoryId || ''}
-                onChange={(e) => handleChange('categoryId', e.target.value)}
+                value={formData.categoryId || ""}
+                onChange={(e) => handleChange("categoryId", e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                  errors.categoryId ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                  errors.categoryId
+                    ? "border-red-300 focus:ring-red-500"
+                    : "border-gray-300"
                 }`}
               >
-                {activeCategories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                {activeCategories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
                 ))}
               </select>
               {errors.categoryId && (
@@ -556,25 +647,33 @@ try {
                 Estado
               </label>
               <select
-                value={formData.status || 'DRAFT'}
-                onChange={(e) => handleChange('status', e.target.value)}
+                value={formData.status || "DRAFT"}
+                onChange={(e) => handleChange("status", e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="DRAFT">Borrador</option>
-                <option value="ACTIVE" disabled={!canPublish && originalProduct?.status !== 'ACTIVE'}>
-                  Activo {!canPublish && originalProduct?.status !== 'ACTIVE' && '(requiere permiso)'}
+                <option
+                  value="ACTIVE"
+                  disabled={!canPublish && originalProduct?.status !== "ACTIVE"}
+                >
+                  Activo{" "}
+                  {!canPublish &&
+                    originalProduct?.status !== "ACTIVE" &&
+                    "(requiere permiso)"}
                 </option>
                 <option value="PAUSED">Pausado</option>
                 <option value="OUT_OF_STOCK">Agotado</option>
               </select>
               {!canPublish && (
                 <p className="mt-1 text-xs text-gray-500">
-                  ℹ️ Necesitas permiso de publicación para cambiar el estado a "Activo"
+                  ℹ️ Necesitas permiso de publicación para cambiar el estado a
+                  "Activo"
                 </p>
               )}
               {canPublish && (
                 <p className="mt-1 text-xs text-gray-500">
-                  💡 Recomendamos comenzar como "Borrador" hasta completar toda la información
+                  💡 Recomendamos comenzar como "Borrador" hasta completar toda
+                  la información
                 </p>
               )}
             </div>
@@ -582,24 +681,35 @@ try {
 
           {/* Price and Inventory */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-            <h3 className="text-base font-semibold text-gray-900">Precio e inventario</h3>
+            <h3 className="text-base font-semibold text-gray-900">
+              Precio e inventario
+            </h3>
 
             <div className="grid grid-cols-2 gap-4">
               {/* Price */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio {formData.status === 'ACTIVE' && <span className="text-red-500">*</span>}
+                  Precio{" "}
+                  {formData.status === "ACTIVE" && (
+                    <span className="text-red-500">*</span>
+                  )}
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                    $
+                  </span>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    value={formData.price || ''}
-                    onChange={(e) => handleChange('price', parseFloat(e.target.value) || 0)}
+                    value={formData.price || ""}
+                    onChange={(e) =>
+                      handleChange("price", parseFloat(e.target.value) || 0)
+                    }
                     className={`w-full pl-7 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                      errors.price ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                      errors.price
+                        ? "border-red-300 focus:ring-red-500"
+                        : "border-gray-300"
                     }`}
                     placeholder="0.00"
                   />
@@ -627,9 +737,13 @@ try {
                   type="number"
                   min="0"
                   value={formData.stock || 0}
-                  onChange={(e) => handleChange('stock', parseInt(e.target.value) || 0)}
+                  onChange={(e) =>
+                    handleChange("stock", parseInt(e.target.value) || 0)
+                  }
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                    errors.stock ? 'border-red-300 focus:ring-red-500' : 'border-gray-300'
+                    errors.stock
+                      ? "border-red-300 focus:ring-red-500"
+                      : "border-gray-300"
                   }`}
                   placeholder="0"
                 />
@@ -648,13 +762,18 @@ try {
             <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-gray-700" />
-                <h3 className="text-base font-semibold text-gray-900">Costos y márgenes</h3>
+                <h3 className="text-base font-semibold text-gray-900">
+                  Costos y márgenes
+                </h3>
               </div>
 
               {/* Track Cost Toggle */}
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="trackCost" className="text-sm font-medium text-gray-700 cursor-pointer">
+                  <Label
+                    htmlFor="trackCost"
+                    className="text-sm font-medium text-gray-700 cursor-pointer"
+                  >
                     Rastrear costo de este producto
                   </Label>
                   <button
@@ -668,7 +787,9 @@ try {
                 <Switch
                   id="trackCost"
                   checked={formData.trackCost !== false}
-                  onCheckedChange={(checked) => handleChange('trackCost', checked)}
+                  onCheckedChange={(checked) =>
+                    handleChange("trackCost", checked)
+                  }
                 />
               </div>
 
@@ -680,13 +801,17 @@ try {
                       Costo unitario (COGS)
                     </label>
                     <div className="relative max-w-xs">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                        $
+                      </span>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        value={formData.cost || ''}
-                        onChange={(e) => handleChange('cost', parseFloat(e.target.value) || 0)}
+                        value={formData.cost || ""}
+                        onChange={(e) =>
+                          handleChange("cost", parseFloat(e.target.value) || 0)
+                        }
                         className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         placeholder="0.00"
                       />
@@ -697,7 +822,7 @@ try {
                   </div>
 
                   {/* Margin Preview - Only if we have both price and cost */}
-                  {(formData.price && formData.cost) && (
+                  {formData.price && formData.cost && (
                     <div className="p-4 bg-green-50 border border-green-200 rounded-lg space-y-2">
                       <div className="flex items-center gap-2 text-sm font-medium text-green-900">
                         <TrendingUp className="w-4 h-4" />
@@ -706,16 +831,25 @@ try {
                       <div className="grid grid-cols-3 gap-4 text-sm">
                         <div>
                           <p className="text-gray-600">Precio</p>
-                          <p className="font-semibold text-gray-900">{formatCurrency(formData.price)}</p>
+                          <p className="font-semibold text-gray-900">
+                            {formatCurrency(formData.price)}
+                          </p>
                         </div>
                         <div>
                           <p className="text-gray-600">Costo</p>
-                          <p className="font-semibold text-gray-900">{formatCurrency(formData.cost)}</p>
+                          <p className="font-semibold text-gray-900">
+                            {formatCurrency(formData.cost)}
+                          </p>
                         </div>
                         <div>
                           <p className="text-gray-600">Ganancia</p>
                           <p className="font-semibold text-green-700">
-                            {formatCurrency(calculateUnitProfit(formData.price, formData.cost))}
+                            {formatCurrency(
+                              calculateUnitProfit(
+                                formData.price,
+                                formData.cost,
+                              ),
+                            )}
                           </p>
                         </div>
                       </div>
@@ -724,9 +858,12 @@ try {
                         <p className="text-lg font-bold text-green-700">
                           {formatPercent(
                             calculateMarginPercent(
-                              calculateUnitProfit(formData.price, formData.cost),
-                              formData.price
-                            )
+                              calculateUnitProfit(
+                                formData.price,
+                                formData.cost,
+                              ),
+                              formData.price,
+                            ),
                           )}
                         </p>
                       </div>
@@ -738,7 +875,10 @@ try {
               {/* Info about trackCost=false */}
               {formData.trackCost === false && (
                 <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-                  <p>El rastreo de costos está desactivado. No se calcularán ganancias ni márgenes para este producto.</p>
+                  <p>
+                    El rastreo de costos está desactivado. No se calcularán
+                    ganancias ni márgenes para este producto.
+                  </p>
                 </div>
               )}
             </div>
@@ -750,14 +890,17 @@ try {
 
             <VariantEditor
               variants={formData.variants || []}
-              onChange={(variants) => handleChange('variants', variants)}
+              onChange={(variants) => handleChange("variants", variants)}
               productSku={formData.sku}
               productPrice={formData.price || 0}
               productId={id}
               hasVariants={formData.hasVariants || false}
-              onToggleVariants={(enabled) => handleChange('hasVariants', enabled)}
-              onStockChange={(totalStock) => handleChange('stock', totalStock)}
+              onToggleVariants={(enabled) =>
+                handleChange("hasVariants", enabled)
+              }
+              onStockChange={(totalStock) => handleChange("stock", totalStock)}
               error={errors.variants}
+              variantErrors={errors} // ← agrega esto
             />
           </div>
         </div>
@@ -766,21 +909,25 @@ try {
         <div className="space-y-6">
           {/* Description */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-            <h3 className="text-base font-semibold text-gray-900">Descripción</h3>
+            <h3 className="text-base font-semibold text-gray-900">
+              Descripción
+            </h3>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Descripción corta
               </label>
               <textarea
-                value={formData.descriptionShort || ''}
-                onChange={(e) => handleChange('descriptionShort', e.target.value)}
+                value={formData.descriptionShort || ""}
+                onChange={(e) =>
+                  handleChange("descriptionShort", e.target.value)
+                }
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                 placeholder="Descripción breve del producto (opcional)"
               />
               <p className="mt-1 text-xs text-gray-500">
-                {(formData.descriptionShort || '').length} caracteres
+                {(formData.descriptionShort || "").length} caracteres
               </p>
             </div>
           </div>
@@ -789,39 +936,45 @@ try {
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
             <div>
               <h3 className="text-base font-semibold text-gray-900">
-                Imágenes {formData.status === 'ACTIVE' && <span className="text-red-500">*</span>}
+                Imágenes{" "}
+                {formData.status === "ACTIVE" && (
+                  <span className="text-red-500">*</span>
+                )}
               </h3>
               <p className="text-xs text-gray-500 mt-1">
-                Galería de hasta 6 imágenes. La primera imagen marcada como "Principal" será la que se muestre en los listados.
+                Galería de hasta 6 imágenes. La primera imagen marcada como
+                "Principal" será la que se muestre en los listados.
               </p>
             </div>
 
-<ImagePickerV2
-  images={formData.images || []}
-  onChange={(images) => handleChange('images', images)}
-  error={errors.images}
-  maxImages={6}
-  productId={id}
-  categoryId={formData.categoryId}
-  sku={formData.sku}
-  uploadRef={uploadRef}  // ← nuevo
-/>
+            <ImagePickerV2
+              images={formData.images || []}
+              onChange={(images) => handleChange("images", images)}
+              error={errors.images}
+              maxImages={6}
+              productId={id}
+              categoryId={formData.categoryId}
+              sku={formData.sku}
+              uploadRef={uploadRef} // ← nuevo
+            />
           </div>
         </div>
       </div>
-          {/* Imágenes por Variante */}
-          {formData.hasVariants && (formData.variants || []).length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-              <h3 className="text-base font-semibold text-gray-900">Imágenes por variante</h3>
-              <VariantImagesSection
-                hasVariants={formData.hasVariants || false}
-                variants={formData.variants || []}
-                productImages={formData.images || []}
-                onVariantImagesChange={handleVariantImagesChange}
-                productId={id}
-              />
-            </div>
-          )}
+      {/* Imágenes por Variante */}
+      {formData.hasVariants && (formData.variants || []).length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+          <h3 className="text-base font-semibold text-gray-900">
+            Imágenes por variante
+          </h3>
+          <VariantImagesSection
+            hasVariants={formData.hasVariants || false}
+            variants={formData.variants || []}
+            productImages={formData.images || []}
+            onVariantImagesChange={handleVariantImagesChange}
+            productId={id}
+          />
+        </div>
+      )}
       {/* Actions */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
         <button
@@ -842,7 +995,7 @@ try {
               Guardar como borrador
             </button>
           )}
-          
+
           <button
             onClick={() => handleSubmit(false)}
             disabled={isLoading}
@@ -856,7 +1009,7 @@ try {
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                {isEdit ? 'Guardar cambios' : 'Guardar producto'}
+                {isEdit ? "Guardar cambios" : "Guardar producto"}
               </>
             )}
           </button>

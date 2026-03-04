@@ -41,8 +41,8 @@ export function VariantImagePicker({
 
   // Label de la variante
   const variantLabel = [
-    variant.options.color && `Color: ${variant.options.color}`,
-    variant.options.size && `Talla: ${variant.options.size}`,
+    variant.color && `Color: ${variant.color}`,
+    variant.size && `Talla: ${variant.size}`,
     `SKU: ${variant.sku}`,
   ]
     .filter(Boolean)

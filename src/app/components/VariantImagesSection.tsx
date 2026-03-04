@@ -45,7 +45,7 @@ export function VariantImagesSection({
 
   // Agrupar variantes por color (si existe)
   const variantsByColor = variants.reduce((acc, variant) => {
-    const color = variant.options.color || 'Sin color';
+    const color = variant.color || 'Sin color';
     if (!acc[color]) {
       acc[color] = [];
     }

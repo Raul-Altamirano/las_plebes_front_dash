@@ -20,19 +20,6 @@ export function validateProductDraft(product: Partial<Product>, allProducts: Pro
     errors.push({ field: 'name', message: 'El nombre del producto es requerido' });
   }
 
-  // SKU required and unique (solo si no tiene variantes)
-  if (!product.hasVariants) {
-    if (!product.sku || product.sku.trim() === '') {
-      errors.push({ field: 'sku', message: 'El SKU es requerido' });
-    } else {
-const isDuplicate = allProducts.some(
-  p => p.sku?.toLowerCase() === product.sku!.toLowerCase() && p.id !== currentId
-);
-      if (isDuplicate) {
-        errors.push({ field: 'sku', message: 'Este SKU ya está en uso' });
-      }
-    }
-  }
 
   // Category required
   if (!product.categoryId) {
@@ -40,53 +27,61 @@ const isDuplicate = allProducts.some(
   }
 
   // Validaciones de variantes
+  // Validaciones de variantes
   if (product.hasVariants) {
     if (!product.variants || product.variants.length === 0) {
       errors.push({ field: 'variants', message: 'Debes agregar al menos una variante' });
     } else {
-      // Validar cada variante
-      product.variants.forEach((variant, index) => {
-        // SKU requerido y único
+      (product.variants ?? []).forEach((variant, index) => {
+        // SKU requerido
         if (!variant.sku || variant.sku.trim() === '') {
-          errors.push({ 
-            field: `variant-${index}-sku`, 
-            message: `Variante ${index + 1}: SKU requerido` 
+          errors.push({
+            field: `variant-${index}-sku`,
+            message: `Variante ${index + 1}: SKU requerido`
           });
         } else {
-          // Verificar unicidad global (contra otros productos y sus variantes)
-const skuInUse = allProducts.some(p => {
-  if (p.id === currentId) return false;
-  if (p.sku?.toLowerCase() === variant.sku?.toLowerCase()) return true;
-  return p.variants?.some(v => v.sku?.toLowerCase() === variant.sku?.toLowerCase());
-});
-          
+          const skuInUse = allProducts.some(p => {
+            if (p.id === currentId) return false;
+            if (p.sku?.toLowerCase() === variant.sku?.toLowerCase()) return true;
+            return p.variants?.some(v => v.sku?.toLowerCase() === variant.sku?.toLowerCase());
+          });
           if (skuInUse) {
-            errors.push({ 
-              field: `variant-${index}-sku`, 
-              message: `Variante ${index + 1}: SKU ya está en uso` 
+            errors.push({
+              field: `variant-${index}-sku`,
+              message: `Variante ${index + 1}: SKU ya está en uso`
             });
           }
         }
 
-        // Al menos una opción (talla o color)
-        if (!variant.options.size && !variant.options.color) {
-          warnings.push({ 
-            field: `variant-${index}-options`, 
-            message: `Variante ${index + 1}: Debe tener al menos talla o color` 
+        // Al menos talla o color — ERROR no warning
+        if (!variant.size && !variant.color) {
+          errors.push({  // ← errors no warnings
+            field: `variant-${index}-options`,
+            message: `Variante ${index + 1}: Debe tener al menos talla o color`
           });
         }
 
         // Stock >= 0
         if (variant.stock < 0) {
-          errors.push({ 
-            field: `variant-${index}-stock`, 
-            message: `Variante ${index + 1}: Stock no puede ser negativo` 
+          errors.push({
+            field: `variant-${index}-stock`,
+            message: `Variante ${index + 1}: Stock no puede ser negativo`
           });
         }
       });
     }
   } else {
-    // Stock must be >= 0 para productos sin variantes
+    // Sin variantes — SKU del producto requerido
+    if (!product.sku || product.sku.trim() === '') {
+      errors.push({ field: 'sku', message: 'El SKU es requerido' });
+    } else {
+      const isDuplicate = allProducts.some(
+        p => p.sku?.toLowerCase() === product.sku!.toLowerCase() && p.id !== currentId
+      );
+      if (isDuplicate) {
+        errors.push({ field: 'sku', message: 'Este SKU ya está en uso' });
+      }
+    }
     if (product.stock !== undefined && product.stock < 0) {
       errors.push({ field: 'stock', message: 'El stock no puede ser negativo' });
     }
@@ -116,14 +111,14 @@ export function validateProductActive(product: Partial<Product>, allProducts: Pr
     if (product.hasVariants) {
       // Debe existir precio en el producto o en todas las variantes
       const hasProductPrice = product.price && product.price > 0;
-      const allVariantsHavePrice = product.variants?.every(v => 
+      const allVariantsHavePrice = product.variants?.every(v =>
         (v.price && v.price > 0) || hasProductPrice
       );
-      
+
       if (!hasProductPrice && !allVariantsHavePrice) {
-        errors.push({ 
-          field: 'price', 
-          message: 'Debe existir un precio en el producto o en todas las variantes' 
+        errors.push({
+          field: 'price',
+          message: 'Debe existir un precio en el producto o en todas las variantes'
         });
       }
     } else {
@@ -134,12 +129,13 @@ export function validateProductActive(product: Partial<Product>, allProducts: Pr
 
     // At least one image required for ACTIVE (producto o variantes)
     const hasProductImages = product.images && product.images.length > 0;
-    const hasVariantImages = product.variants?.some(v => v.imageUrl);
-    
+    const hasVariantImages = product.variants?.some(v => v.images && v.images.length > 0);
+
+
     if (!hasProductImages && !hasVariantImages) {
-      errors.push({ 
-        field: 'images', 
-        message: 'Debes agregar al menos una imagen en el producto o en las variantes' 
+      errors.push({
+        field: 'images',
+        message: 'Debes agregar al menos una imagen en el producto o en las variantes'
       });
     }
   }

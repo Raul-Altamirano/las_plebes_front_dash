@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { Plus, Trash2, Wand2 } from 'lucide-react';
-import { Card } from './ui/card';
-import { Switch } from './ui/switch';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { ProductVariant } from '../types/product';
-import { useProductsStore } from '../store/ProductsContext';
+import { useState } from "react";
+import { Plus, Trash2, Wand2 } from "lucide-react";
+import { Card } from "./ui/card";
+import { Switch } from "./ui/switch";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { ProductVariant } from "../types/product";
+import { useProductsStore } from "../store/ProductsContext";
 
 interface VariantEditorProps {
   variants: ProductVariant[];
@@ -20,25 +20,27 @@ interface VariantEditorProps {
   hasVariants?: boolean;
   onToggleVariants?: (enabled: boolean) => void;
   onStockChange?: (totalStock: number) => void;
+  variantErrors?: Record<string, string>;
 }
 
-export function VariantEditor({ 
-  variants, 
+export function VariantEditor({
+  variants,
   onChange,
-  productSku = '',
+  productSku = "",
   productPrice = 0,
   productId,
   disabled = false,
   error,
   hasVariants = false,
   onToggleVariants,
-  onStockChange
+  onStockChange,
+  variantErrors = {},
 }: VariantEditorProps) {
   const { isSkuAvailable } = useProductsStore();
   const [showGenerator, setShowGenerator] = useState(false);
   const [generatorData, setGeneratorData] = useState({
-    sizes: '',
-    colors: ''
+    sizes: "",
+    colors: "",
   });
 
   const totalStock = variants.reduce((sum, v) => sum + (v.stock || 0), 0);
@@ -47,7 +49,10 @@ export function VariantEditor({
   const handleVariantsChange = (newVariants: ProductVariant[]) => {
     onChange(newVariants);
     if (onStockChange && hasVariants) {
-      const newTotalStock = newVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+      const newTotalStock = newVariants.reduce(
+        (sum, v) => sum + (v.stock || 0),
+        0,
+      );
       onStockChange(newTotalStock);
     }
   };
@@ -66,25 +71,38 @@ export function VariantEditor({
     const newVariant: ProductVariant = {
       id: Math.random().toString(36).substring(7),
       sku: `${productSku}-VAR-${variants.length + 1}`,
-      options: {},
+      size: undefined,
+      color: undefined,
       stock: 0,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
     handleVariantsChange([...variants, newVariant]);
   };
 
-  const updateVariant = (index: number, field: keyof ProductVariant, value: any) => {
-    const updated = [...variants];
-    updated[index] = { ...updated[index], [field]: value, updatedAt: new Date().toISOString() };
-    handleVariantsChange(updated);
-  };
-
-  const updateVariantOption = (index: number, option: 'size' | 'color', value: string) => {
+  const updateVariant = (
+    index: number,
+    field: keyof ProductVariant,
+    value: any,
+  ) => {
     const updated = [...variants];
     updated[index] = {
       ...updated[index],
-      options: { ...updated[index].options, [option]: value || undefined },
-      updatedAt: new Date().toISOString()
+      [field]: value,
+      updatedAt: new Date().toISOString(),
+    };
+    handleVariantsChange(updated);
+  };
+
+  const updateVariantOption = (
+    index: number,
+    option: "size" | "color",
+    value: string,
+  ) => {
+    const updated = [...variants];
+    updated[index] = {
+      ...updated[index],
+      [option]: value || undefined,
+      updatedAt: new Date().toISOString(),
     };
     handleVariantsChange(updated);
   };
@@ -95,73 +113,85 @@ export function VariantEditor({
   };
 
   const generateVariants = () => {
-    const sizes = generatorData.sizes.split(',').map(s => s.trim()).filter(Boolean);
-    const colors = generatorData.colors.split(',').map(c => c.trim()).filter(Boolean);
+    const sizes = generatorData.sizes
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const colors = generatorData.colors
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
 
     if (sizes.length === 0 && colors.length === 0) {
       return;
     }
 
     const generated: ProductVariant[] = [];
-    
+
     if (sizes.length > 0 && colors.length > 0) {
       // Combinación de tallas y colores
-      sizes.forEach(size => {
-        colors.forEach(color => {
-          const sizeCode = size.replace(/\s+/g, '');
+      sizes.forEach((size) => {
+        colors.forEach((color) => {
+          const sizeCode = size.replace(/\s+/g, "");
           const colorCode = color.substring(0, 3).toUpperCase();
           generated.push({
             id: Math.random().toString(36).substring(7),
             sku: `${productSku}-${sizeCode}-${colorCode}`,
-            options: { size, color },
+            size: size,
+            color: color,
             stock: 0,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
           });
         });
       });
     } else if (sizes.length > 0) {
       // Solo tallas
-      sizes.forEach(size => {
-        const sizeCode = size.replace(/\s+/g, '');
+      sizes.forEach((size) => {
+        // ← falta esto
+        const sizeCode = size.replace(/\s+/g, "");
         generated.push({
           id: Math.random().toString(36).substring(7),
           sku: `${productSku}-${sizeCode}`,
-          options: { size },
+          size: size,
           stock: 0,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         });
-      });
+      }); // ← y el cierre
     } else {
       // Solo colores
-      colors.forEach(color => {
+      colors.forEach((color) => {
+        // ← falta esto
         const colorCode = color.substring(0, 3).toUpperCase();
         generated.push({
           id: Math.random().toString(36).substring(7),
           sku: `${productSku}-${colorCode}`,
-          options: { color },
+          color: color,
           stock: 0,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         });
-      });
+      }); // ← y el cierre
     }
 
     handleVariantsChange([...variants, ...generated]);
     setShowGenerator(false);
-    setGeneratorData({ sizes: '', colors: '' });
+    setGeneratorData({ sizes: "", colors: "" });
   };
 
-  const getVariantSkuError = (sku: string, currentIndex: number): string | null => {
+  const getVariantSkuError = (
+    sku: string,
+    currentIndex: number,
+  ): string | null => {
     // Check duplicates within variants
     const duplicateInVariants = variants.some(
-      (v, i) => i !== currentIndex && v.sku.toLowerCase() === sku.toLowerCase()
+      (v, i) => i !== currentIndex && v.sku.toLowerCase() === sku.toLowerCase(),
     );
     if (duplicateInVariants) {
-      return 'SKU duplicado en variantes';
+      return "SKU duplicado en variantes";
     }
 
     // Check global availability (excluding current product)
     if (!isSkuAvailable(sku, productId)) {
-      return 'SKU ya existe en otro producto';
+      return "SKU ya existe en otro producto";
     }
 
     return null;
@@ -192,9 +222,7 @@ export function VariantEditor({
         </div>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {hasVariants && (
         <>
@@ -233,17 +261,29 @@ export function VariantEditor({
                     id="gen-sizes"
                     placeholder="Ej: 25, 26, 27, 28"
                     value={generatorData.sizes}
-                    onChange={(e) => setGeneratorData(prev => ({ ...prev, sizes: e.target.value }))}
+                    onChange={(e) =>
+                      setGeneratorData((prev) => ({
+                        ...prev,
+                        sizes: e.target.value,
+                      }))
+                    }
                   />
                   <p className="text-xs text-gray-500 mt-1">Opcional</p>
                 </div>
                 <div>
-                  <Label htmlFor="gen-colors">Colores (separados por coma)</Label>
+                  <Label htmlFor="gen-colors">
+                    Colores (separados por coma)
+                  </Label>
                   <Input
                     id="gen-colors"
                     placeholder="Ej: Negro, Café, Miel"
                     value={generatorData.colors}
-                    onChange={(e) => setGeneratorData(prev => ({ ...prev, colors: e.target.value }))}
+                    onChange={(e) =>
+                      setGeneratorData((prev) => ({
+                        ...prev,
+                        colors: e.target.value,
+                      }))
+                    }
                   />
                   <p className="text-xs text-gray-500 mt-1">Opcional</p>
                 </div>
@@ -252,13 +292,13 @@ export function VariantEditor({
                 <Button type="button" size="sm" onClick={generateVariants}>
                   Generar
                 </Button>
-                <Button 
-                  type="button" 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
                   onClick={() => {
                     setShowGenerator(false);
-                    setGeneratorData({ sizes: '', colors: '' });
+                    setGeneratorData({ sizes: "", colors: "" });
                   }}
                 >
                   Cancelar
@@ -270,13 +310,14 @@ export function VariantEditor({
           <div className="space-y-3">
             {variants.length === 0 ? (
               <div className="text-center py-8 text-gray-500 border border-dashed border-gray-300 rounded-lg">
-                No hay variantes. Usa "Agregar variante" o "Generar variantes" para comenzar.
+                No hay variantes. Usa "Agregar variante" o "Generar variantes"
+                para comenzar.
               </div>
             ) : (
               variants.map((variant, index) => {
                 const skuError = getVariantSkuError(variant.sku, index);
-                const hasOptions = variant.options.size || variant.options.color;
-                
+                const hasOptions = variant.size || variant.color;
+
                 return (
                   <Card key={variant.id} className="p-4">
                     <div className="grid grid-cols-12 gap-3">
@@ -286,10 +327,24 @@ export function VariantEditor({
                         <Input
                           id={`variant-size-${index}`}
                           placeholder="25"
-                          value={variant.options.size || ''}
-                          onChange={(e) => updateVariantOption(index, 'size', e.target.value)}
+                          value={variant.size || ""}
+                          onChange={(e) =>
+                            updateVariantOption(index, "size", e.target.value)
+                          }
                           disabled={disabled}
+                          className={
+                            variantErrors[`variant-${index}-options`]
+                              ? "border-red-500"
+                              : ""
+                          }
                         />
+                        {!variant.size &&
+                          !variant.color &&
+                          variantErrors[`variant-${index}-options`] && (
+                            <p className="text-xs text-red-500 mt-1">
+                              {variantErrors[`variant-${index}-options`]}
+                            </p>
+                          )}
                       </div>
 
                       {/* Color */}
@@ -298,9 +353,16 @@ export function VariantEditor({
                         <Input
                           id={`variant-color-${index}`}
                           placeholder="Negro"
-                          value={variant.options.color || ''}
-                          onChange={(e) => updateVariantOption(index, 'color', e.target.value)}
+                          value={variant.color || ""}
+                          onChange={(e) =>
+                            updateVariantOption(index, "color", e.target.value)
+                          }
                           disabled={disabled}
+                          className={
+                            variantErrors[`variant-${index}-options`]
+                              ? "border-red-500"
+                              : ""
+                          }
                         />
                       </div>
 
@@ -313,15 +375,16 @@ export function VariantEditor({
                           id={`variant-sku-${index}`}
                           placeholder="BV-001-25-NEG"
                           value={variant.sku}
-                          onChange={(e) => updateVariant(index, 'sku', e.target.value)}
-                          className={skuError ? 'border-red-500' : ''}
+                          onChange={(e) =>
+                            updateVariant(index, "sku", e.target.value)
+                          }
+                          className={skuError ? "border-red-500" : ""}
                           disabled={disabled}
                         />
                         {skuError && (
-                          <p className="text-xs text-red-500 mt-1">{skuError}</p>
-                        )}
-                        {!hasOptions && (
-                          <p className="text-xs text-amber-600 mt-1">Debe tener al menos talla o color</p>
+                          <p className="text-xs text-red-500 mt-1">
+                            {skuError}
+                          </p>
                         )}
                       </div>
 
@@ -333,28 +396,42 @@ export function VariantEditor({
                           type="number"
                           min="0"
                           value={variant.stock}
-                          onChange={(e) => updateVariant(index, 'stock', parseInt(e.target.value) || 0)}
+                          onChange={(e) =>
+                            updateVariant(
+                              index,
+                              "stock",
+                              parseInt(e.target.value) || 0,
+                            )
+                          }
                           disabled={disabled}
                         />
                       </div>
 
                       {/* Precio (opcional) */}
                       <div className="col-span-2">
-                        <Label htmlFor={`variant-price-${index}`}>
-                          Precio
-                        </Label>
+                        <Label htmlFor={`variant-price-${index}`}>Precio</Label>
                         <Input
                           id={`variant-price-${index}`}
                           type="number"
                           min="0"
                           step="0.01"
                           placeholder={`${productPrice}`}
-                          value={variant.price || ''}
-                          onChange={(e) => updateVariant(index, 'price', e.target.value ? parseFloat(e.target.value) : undefined)}
+                          value={variant.price || ""}
+                          onChange={(e) =>
+                            updateVariant(
+                              index,
+                              "price",
+                              e.target.value
+                                ? parseFloat(e.target.value)
+                                : undefined,
+                            )
+                          }
                           disabled={disabled}
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          {variant.price ? `$${variant.price}` : `Heredado: $${productPrice}`}
+                          {variant.price
+                            ? `$${variant.price}`
+                            : `Heredado: $${productPrice}`}
                         </p>
                       </div>
 
