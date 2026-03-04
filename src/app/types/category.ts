@@ -12,6 +12,7 @@ export interface Category {
   productCount?: number;
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string;
 }
 
 export type CategoryFormData = {

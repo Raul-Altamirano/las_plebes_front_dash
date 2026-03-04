@@ -36,10 +36,11 @@ import {
 } from '../components/ui/select';
 import { getPromotionStatus, validateCouponCode } from '../utils/promotionHelpers';
 import type { Coupon, DiscountType, PromotionScope, PromotionStatus } from '../types/promotion';
+import { RefreshButton } from '../components/RefreshButton';
 
 export default function Coupons() {
-  const { coupons, createCoupon, updateCoupon, refresh, deleteCoupon } = useCoupons();
-  const { categories } = useCategories();
+// Destructuring — agrega status, lastFetch, refresh
+const { coupons, createCoupon, updateCoupon, refresh, deleteCoupon, status, lastFetch } = useCoupons();  const { categories } = useCategories();
   const { products } = useProducts();
   const { auditLog } = useAudit();
   const { currentUser, hasPermission } = useAuth();
@@ -70,7 +71,7 @@ export default function Coupons() {
 
   // Filtrar cupones
   const filteredCoupons = useMemo(() => {
-    let result = coupons.filter(c => !c.code.includes('__archived__'));
+let result = Array.isArray(coupons) ? coupons.filter(c => !c.code.includes('__archived__')) : [];
     
     // Filtrar por búsqueda
     if (searchQuery.trim()) {
@@ -326,18 +327,21 @@ const handleSubmit = async () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl">Cupones</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gestiona códigos de descuento para tus clientes
-          </p>
-        </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="size-4" />
-          Nuevo Cupón
-        </Button>
-      </div>
+<div className="flex items-center justify-between">
+  <div>
+    <h1 className="text-2xl">Cupones</h1>
+    <p className="text-muted-foreground text-sm mt-1">
+      Gestiona códigos de descuento para tus clientes
+    </p>
+  </div>
+  <div className="flex items-center gap-3">
+    <RefreshButton status={status} lastFetch={lastFetch} onRefresh={refresh} />
+    <Button onClick={openCreateDialog}>
+      <Plus className="size-4" />
+      Nuevo Cupón
+    </Button>
+  </div>
+</div>
 
       {/* Filtros */}
       <div className="flex gap-4">
@@ -633,7 +637,7 @@ const handleSubmit = async () => {
                 <div className="space-y-2">
                   <Label>Categorías</Label>
                   <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {categories.filter(c => !c.isArchived).map(cat => (
+                    {(Array.isArray(categories) ? categories : []).filter(c => !c.isArchived).map(cat => (
                       <label key={cat.id} className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -661,7 +665,7 @@ const handleSubmit = async () => {
                 <div className="space-y-2">
                   <Label>Productos</Label>
                   <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {products.filter(p => !p.isArchived).map(prod => (
+                    {(Array.isArray(products) ? products : []).filter(p => !p.isArchived).map(prod => (
                       <label key={prod.id} className="flex items-center gap-2">
                         <input
                           type="checkbox"

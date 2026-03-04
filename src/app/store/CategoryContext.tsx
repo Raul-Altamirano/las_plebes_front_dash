@@ -40,7 +40,7 @@ function clearCache() {
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
-export type FetchStatus = "idle" | "loading" | "ready" | "error";
+export type FetchStatus = "idle" | "loading" | "success" | "error";
 
 interface State {
   categories: Category[];
@@ -65,7 +65,7 @@ function reducer(state: State, action: Action): State {
     case "FETCH_OK":
       return {
         ...state,
-        status: "ready",
+        status: "success",
         categories: action.payload,
         lastFetch: Date.now(),
         error: null,
@@ -73,7 +73,7 @@ function reducer(state: State, action: Action): State {
     case "FETCH_ERROR":
       return { ...state, status: "error", error: action.payload };
     case "SET_FROM_CACHE":
-      return { ...state, status: "ready", categories: action.payload, error: null };
+      return { ...state, status: "success", categories: action.payload, error: null };
     case "UPSERT": {
       const exists = state.categories.some((c) => c.id === action.payload.id);
       const next = exists
@@ -98,11 +98,12 @@ interface CategoriesContextValue {
   categories: Category[];
   status: FetchStatus;
   error: string | null;
-  lastFetch: number | null;
+  lastFetch: number | null; 
   refresh: () => Promise<void>;
   createCategory: (payload: CategoryFormData) => Promise<void>;
   updateCategory: (id: string, payload: Partial<CategoryFormData>) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
+  restoreCategory: (id: string) => Promise<void>;
   getById: (id: string) => Category | undefined;
 isNameAvailable: (name: string, excludeId?: string) => boolean;
 isSlugAvailable: (slug: string, excludeId?: string) => boolean;
@@ -125,7 +126,7 @@ export function CategoriesProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     dispatch({ type: "FETCH_START" });
     try {
-      const res = await categoriesApi.listCategories();
+const res = await categoriesApi.listCategories(true);
       writeCache(res.items);
       dispatch({ type: "FETCH_OK", payload: res.items });
     } catch (e: any) {
@@ -170,6 +171,8 @@ const createCategory = useCallback(
     [state.categories, audit]
   );
 
+
+
   const deleteCategory = useCallback(
     async (id: string) => {
       const cat = state.categories.find((c) => c.id === id);
@@ -185,6 +188,13 @@ const createCategory = useCallback(
     },
     [state.categories, audit]
   );
+
+  const restoreCategory = useCallback(async (id: string) => {
+  const res = await categoriesApi.restoreCategory(id);
+  const restored = res.data;
+  dispatch({ type: "UPSERT", payload: restored });
+  await refresh();
+}, [refresh]);
 
   const getById = useCallback(
     (id: string) => state.categories.find((c) => c.id === id),
@@ -221,6 +231,7 @@ const isSlugAvailable = useCallback(
         getById,
         isSlugAvailable,
         isNameAvailable,
+        restoreCategory,
       }}
     >
       {children}
@@ -242,6 +253,7 @@ export function useCategoriesStore() {
         createCategory: async () => {},
         updateCategory: async () => {},
         deleteCategory: async () => {},
+        restoreCategory: async () => {},
         getById: () => undefined,
         isNameAvailable: () => true,
         isSlugAvailable: () => true,

@@ -4,12 +4,12 @@ import { usePromotions } from '../store/PromotionsContext';
 import { useCategories } from '../store/CategoryContext';
 import { useProducts } from '../store/ProductsContext';
 import { useAudit } from '../store/AuditContext';
-import { useAuth } from '../store/AuthContext';
 import { useToast } from '../store/ToastContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
+import { RefreshButton } from '../components/RefreshButton';
 import {
   Table,
   TableBody,
@@ -37,18 +37,26 @@ import { getPromotionStatus } from '../utils/promotionHelpers';
 import type { Promotion, DiscountType, PromotionScope, PromotionStatus } from '../types/promotion';
 
 export default function Promotions() {
-  const { promotions, addPromotion, updatePromotion, togglePromotion, deletePromotion } = usePromotions();
+  const {
+    promotions,
+    createPromotion,
+    updatePromotion,
+    togglePromotion,
+    deletePromotion,
+    status,
+    lastFetch,
+    refresh,
+  } = usePromotions();
   const { categories } = useCategories();
   const { products } = useProducts();
   const { auditLog } = useAudit();
-  const { currentUser } = useAuth();
   const { showToast } = useToast();
-  
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
   const [statusFilter, setStatusFilter] = useState<PromotionStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -62,30 +70,28 @@ export default function Promotions() {
     scopeProductIds: [] as string[],
     stackable: false,
   });
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Filtrar promociones
   const filteredPromotions = useMemo(() => {
-    let result = promotions.filter(promo => !promo.name.includes('__archived__'));
-    
-    // Filtrar por búsqueda
+    let result = Array.isArray(promotions)
+      ? promotions.filter(p => !p.name.includes('__archived__'))
+      : [];
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(promo =>
-        promo.name.toLowerCase().includes(query)
-      );
+      result = result.filter(p => p.name.toLowerCase().includes(query));
     }
-    
-    // Filtrar por estado
+
     if (statusFilter !== 'ALL') {
-      result = result.filter(promo => {
-        const status = getPromotionStatus(promo.isActive, promo.startsAt, promo.endsAt);
-        return status === statusFilter;
+      result = result.filter(p => {
+        const s = getPromotionStatus(p.isActive, p.startsAt, p.endsAt);
+        return s === statusFilter;
       });
     }
-    
-    return result.sort((a, b) => 
+
+    return result.sort((a, b) =>
       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   }, [promotions, searchQuery, statusFilter]);
@@ -128,11 +134,11 @@ export default function Promotions() {
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre es requerido';
     }
-    
+
     const value = parseFloat(formData.value);
     if (isNaN(value)) {
       newErrors.value = 'El valor debe ser un número';
@@ -141,30 +147,30 @@ export default function Promotions() {
     } else if (formData.type === 'FIXED' && value <= 0) {
       newErrors.value = 'El monto debe ser mayor a 0';
     }
-    
+
     if (formData.startsAt && formData.endsAt) {
       if (new Date(formData.endsAt) <= new Date(formData.startsAt)) {
         newErrors.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
       }
     }
-    
+
     if (!formData.scopeAll && formData.scopeCategoryIds.length === 0 && formData.scopeProductIds.length === 0) {
       newErrors.scope = 'Debes seleccionar al menos una categoría o producto';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateForm()) return;
-    
+
     const scope: PromotionScope = {
       all: formData.scopeAll,
       categoryIds: formData.scopeAll ? undefined : formData.scopeCategoryIds,
       productIds: formData.scopeAll ? undefined : formData.scopeProductIds,
     };
-    
+
     const promoData = {
       name: formData.name.trim(),
       type: formData.type,
@@ -175,95 +181,88 @@ export default function Promotions() {
       scope,
       stackable: formData.stackable,
     };
-    
-    if (editingPromo) {
-      updatePromotion(editingPromo.id, promoData);
-      auditLog({
-        action: 'PROMO_UPDATED',
-        entity: {
-          type: 'promotion',
-          id: editingPromo.id,
-          label: promoData.name,
-        },
-        changes: [
-          { field: 'promotion', oldValue: editingPromo.name, newValue: promoData.name }
-        ]
-      });
-      showToast('Promoción actualizada correctamente', 'success');
-    } else {
-      const newPromo = addPromotion(promoData);
-      auditLog({
-        action: 'PROMO_CREATED',
-        entity: {
-          type: 'promotion',
-          id: newPromo.id,
-          label: newPromo.name,
-        },
-        changes: []
-      });
-      showToast('Promoción creada correctamente', 'success');
+
+    try {
+      setErrors({});
+
+      if (editingPromo) {
+        await updatePromotion(editingPromo.id, promoData);
+        auditLog({
+          action: 'PROMO_UPDATED',
+          entity: { type: 'promotion', id: editingPromo.id, label: promoData.name },
+          changes: [{ field: 'promotion', oldValue: editingPromo.name, newValue: promoData.name }],
+        });
+        showToast('success', 'Promoción actualizada correctamente');
+      } else {
+        const newPromo = await createPromotion(promoData);
+        auditLog({
+          action: 'PROMO_CREATED',
+          entity: { type: 'promotion', id: newPromo.id, label: newPromo.name },
+          changes: [],
+        });
+        showToast('success', 'Promoción creada correctamente');
+      }
+
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      const fieldErrors = err?.details?.fieldErrors;
+      if (fieldErrors && typeof fieldErrors === 'object') {
+        setErrors(fieldErrors);
+        showToast('fail', err?.message ?? 'Revisa el formulario');
+        return;
+      }
+      showToast('fail', err?.message ?? 'No se pudo guardar la promoción');
     }
-    
-    setIsDialogOpen(false);
   };
 
-  const handleToggle = (promo: Promotion) => {
-    togglePromotion(promo.id);
-    auditLog({
-      action: 'PROMO_TOGGLED',
-      entity: {
-        type: 'promotion',
-        id: promo.id,
-        label: promo.name,
-      },
-      changes: [
-        { field: 'isActive', oldValue: promo.isActive.toString(), newValue: (!promo.isActive).toString() }
-      ]
-    });
-    showToast(`Promoción ${!promo.isActive ? 'activada' : 'desactivada'}`, 'success');
+  const handleToggle = async (promo: Promotion) => {
+    try {
+      await togglePromotion(promo.id, !promo.isActive);
+      auditLog({
+        action: 'PROMO_TOGGLED',
+        entity: { type: 'promotion', id: promo.id, label: promo.name },
+        changes: [
+          { field: 'isActive', oldValue: promo.isActive.toString(), newValue: (!promo.isActive).toString() },
+        ],
+      });
+      showToast('success', `Promoción ${!promo.isActive ? 'activada' : 'desactivada'}`);
+    } catch (err: any) {
+      showToast('fail', err?.message ?? 'No se pudo cambiar el estado');
+    }
   };
 
-  const handleDelete = (promo: Promotion) => {
-    if (confirm('¿Estás seguro de eliminar esta promoción?')) {
-      deletePromotion(promo.id);
+  const handleDelete = async (promo: Promotion) => {
+    if (!confirm('¿Estás seguro de eliminar esta promoción?')) return;
+    try {
+      await deletePromotion(promo.id);
       auditLog({
         action: 'PROMO_DELETED',
-        entity: {
-          type: 'promotion',
-          id: promo.id,
-          label: promo.name,
-        },
-        changes: []
+        entity: { type: 'promotion', id: promo.id, label: promo.name },
+        changes: [],
       });
-      showToast('Promoción eliminada', 'success');
+      showToast('success', 'Promoción eliminada');
+    } catch (err: any) {
+      showToast('fail', err?.message ?? 'No se pudo eliminar la promoción');
     }
   };
 
   const getStatusBadge = (promo: Promotion) => {
-    const status = getPromotionStatus(promo.isActive, promo.startsAt, promo.endsAt);
-    
+    const s = getPromotionStatus(promo.isActive, promo.startsAt, promo.endsAt);
     const variants = {
-      ACTIVE: { label: 'Activa', variant: 'default' as const },
-      SCHEDULED: { label: 'Programada', variant: 'secondary' as const },
-      EXPIRED: { label: 'Expirada', variant: 'outline' as const },
-      INACTIVE: { label: 'Inactiva', variant: 'outline' as const },
+      ACTIVE:    { label: 'Activa',      variant: 'default'   as const },
+      SCHEDULED: { label: 'Programada',  variant: 'secondary' as const },
+      EXPIRED:   { label: 'Expirada',    variant: 'outline'   as const },
+      INACTIVE:  { label: 'Inactiva',    variant: 'outline'   as const },
     };
-    
-    const config = variants[status];
+    const config = variants[s];
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const getScopeLabel = (scope: PromotionScope) => {
     if (scope.all) return 'Todos los productos';
-    
     const parts: string[] = [];
-    if (scope.categoryIds && scope.categoryIds.length > 0) {
-      parts.push(`${scope.categoryIds.length} categorías`);
-    }
-    if (scope.productIds && scope.productIds.length > 0) {
-      parts.push(`${scope.productIds.length} productos`);
-    }
-    
+    if (scope.categoryIds?.length) parts.push(`${scope.categoryIds.length} categorías`);
+    if (scope.productIds?.length) parts.push(`${scope.productIds.length} productos`);
     return parts.join(', ') || 'Sin alcance';
   };
 
@@ -277,10 +276,13 @@ export default function Promotions() {
             Gestiona descuentos automáticos para tus productos
           </p>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="size-4" />
-          Nueva Promoción
-        </Button>
+        <div className="flex items-center gap-3">
+          <RefreshButton status={status} lastFetch={lastFetch} onRefresh={refresh} />
+          <Button onClick={openCreateDialog}>
+            <Plus className="size-4" />
+            Nueva Promoción
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -372,29 +374,13 @@ export default function Promotions() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(promo)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(promo)}>
                         <Edit className="size-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggle(promo)}
-                      >
-                        {promo.isActive ? (
-                          <PowerOff className="size-4" />
-                        ) : (
-                          <Power className="size-4" />
-                        )}
+                      <Button variant="ghost" size="icon" onClick={() => handleToggle(promo)}>
+                        {promo.isActive ? <PowerOff className="size-4" /> : <Power className="size-4" />}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(promo)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(promo)}>
                         <Trash2 className="size-4 text-destructive" />
                       </Button>
                     </div>
@@ -435,8 +421,8 @@ export default function Promotions() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="type">Tipo de Descuento *</Label>
-                <Select 
-                  value={formData.type} 
+                <Select
+                  value={formData.type}
                   onValueChange={(value: DiscountType) => setFormData({ ...formData, type: value })}
                 >
                   <SelectTrigger id="type">
@@ -515,22 +501,16 @@ export default function Promotions() {
                 <div className="space-y-2">
                   <Label>Categorías</Label>
                   <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {categories.filter(c => !c.isArchived).map(cat => (
+                    {(Array.isArray(categories) ? categories : []).filter(c => !c.isArchived).map(cat => (
                       <label key={cat.id} className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           checked={formData.scopeCategoryIds.includes(cat.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                scopeCategoryIds: [...formData.scopeCategoryIds, cat.id]
-                              });
+                              setFormData({ ...formData, scopeCategoryIds: [...formData.scopeCategoryIds, cat.id] });
                             } else {
-                              setFormData({
-                                ...formData,
-                                scopeCategoryIds: formData.scopeCategoryIds.filter(id => id !== cat.id)
-                              });
+                              setFormData({ ...formData, scopeCategoryIds: formData.scopeCategoryIds.filter(id => id !== cat.id) });
                             }
                           }}
                         />
@@ -543,22 +523,16 @@ export default function Promotions() {
                 <div className="space-y-2">
                   <Label>Productos</Label>
                   <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {products.filter(p => !p.isArchived).map(prod => (
+                    {(Array.isArray(products) ? products : []).filter(p => !p.isArchived).map(prod => (
                       <label key={prod.id} className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           checked={formData.scopeProductIds.includes(prod.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                scopeProductIds: [...formData.scopeProductIds, prod.id]
-                              });
+                              setFormData({ ...formData, scopeProductIds: [...formData.scopeProductIds, prod.id] });
                             } else {
-                              setFormData({
-                                ...formData,
-                                scopeProductIds: formData.scopeProductIds.filter(id => id !== prod.id)
-                              });
+                              setFormData({ ...formData, scopeProductIds: formData.scopeProductIds.filter(id => id !== prod.id) });
                             }
                           }}
                         />

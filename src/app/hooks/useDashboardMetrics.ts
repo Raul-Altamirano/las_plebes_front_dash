@@ -41,16 +41,16 @@ export function useDashboardMetrics(
     const sixtyDaysAgo = subDays(now, 60);
 
     // Filtrar órdenes válidas (excluir CANCELLED)
-    const validOrders = orders.filter(o => o.status !== 'CANCELLED');
+    const validOrders = (orders ?? []).filter(o => o.status !== 'CANCELLED');
 
     // Período A: últimos 30 días
-    const periodAOrders = validOrders.filter(o => {
+    const periodAOrders = (validOrders ?? []).filter(o => {
       const date = new Date(o.createdAt);
       return date >= thirtyDaysAgo && date <= now;
     });
 
     // Período B: 30-60 días atrás
-    const periodBOrders = validOrders.filter(o => {
+    const periodBOrders = (validOrders ?? []).filter(o => {
       const date = new Date(o.createdAt);
       return date >= sixtyDaysAgo && date < thirtyDaysAgo;
     });
@@ -123,15 +123,15 @@ export function useDashboardMetrics(
       : null;
 
     // Alertas
-    const lowStockCount = products.filter(p => 
+    const lowStockCount = (products ?? []).filter(p => 
       p.status === 'ACTIVE' && p.stock <= lowStockThreshold
     ).length;
 
-    const pendingOrdersCount = orders.filter(o => 
+    const pendingOrdersCount = (orders ?? []).filter(o => 
       o.status === 'PLACED' || o.status === 'PAID' || o.status === 'HOLD_REVIEW'
     ).length;
 
-    const pendingRMAsCount = rmas.filter(r => 
+    const pendingRMAsCount = (rmas ?? []).filter(r => 
       r.status === 'DRAFT' || r.status === 'APPROVED'
     ).length;
 

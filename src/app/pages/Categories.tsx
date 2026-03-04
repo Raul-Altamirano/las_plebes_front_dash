@@ -35,21 +35,27 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { RefreshButton } from '../components/RefreshButton';
 
-
 export function Categories() {
-  // Hooks en orden
   const categoriesContext = useCategories();
   const productsContext = useProducts();
   const authContext = useAuth();
   const auditContext = useAudit();
 
-  // Destructure después de obtener los contextos
-const { categories, createCategory, updateCategory, deleteCategory, 
-        isNameAvailable, isSlugAvailable,
-        status, lastFetch, refresh } = categoriesContext;
-        
+  const {
+    categories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    isNameAvailable,
+    isSlugAvailable,
+    restoreCategory,
+    status,
+    lastFetch,
+    refresh,
+  } = categoriesContext;
+
   const { products } = productsContext;
-  const { currentUser, hasPermission } = authContext;
+  const { hasPermission } = authContext;
   const { auditLog } = auditContext;
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -57,67 +63,51 @@ const { categories, createCategory, updateCategory, deleteCategory,
   const [archivingCategory, setArchivingCategory] = useState<Category | null>(null);
   const [restoringCategory, setRestoringCategory] = useState<Category | null>(null);
 
-  // Permisos
   const canCreate = hasPermission('category:create');
   const canUpdate = hasPermission('category:update');
   const canArchive = hasPermission('category:archive');
 
-  // Contar productos por categoría
-  const getProductsCount = (categoryId: string) => {
-    return products.filter((p) => p.categoryId === categoryId && !p.isArchived).length;
+  const getProductsCount = (categoryId: string) =>
+    products.filter((p) => p.categoryId === categoryId && !p.isArchived).length;
+
+  const handleCreate = async (data: { name: string; slug: string; description?: string }) => {
+    await createCategory(data);
+    setIsCreateDialogOpen(false);
   };
 
-  // Manejar creación
-// por esto
-const handleCreate = async (data: { name: string; slug: string; description?: string }) => {
-  await createCategory(data);
-  auditLog({
-    action: 'CATEGORY_CREATED',
-    entity: { type: 'category', id: '', label: data.name },
-  });
-  setIsCreateDialogOpen(false);
-};
+  const handleEdit = async (data: { name: string; slug: string; description?: string }) => {
+    if (!editingCategory) return;
+    await updateCategory(editingCategory.id, data);
+    setEditingCategory(null);
+  };
 
-  // Manejar edición
-const handleEdit = async (data: { name: string; slug: string; description?: string }) => {
-  if (!editingCategory) return;
-  await updateCategory(editingCategory.id, data);
-  setEditingCategory(null);
-};
+  const handleArchive = async () => {
+    if (!archivingCategory) return;
+    await deleteCategory(archivingCategory.id);
+    auditLog({
+      action: 'CATEGORY_ARCHIVED',
+      entity: { type: 'category', id: archivingCategory.id, label: archivingCategory.name },
+    });
+    setArchivingCategory(null);
+  };
 
-  // Manejar archivado
-const handleArchive = async () => {
-  if (!archivingCategory) return;
-  await deleteCategory(archivingCategory.id);
-  setArchivingCategory(null);
-};
-
-  // Manejar restauración
-  const handleRestore = () => {
+  // Restore: usa updateCategory para marcar isArchived: false
+  const handleRestore = async () => {
     if (!restoringCategory) return;
-
-    restoreCategory(restoringCategory.id);
-
+    await restoreCategory(restoringCategory.id, { isArchived: false } as any);
     auditLog({
       action: 'CATEGORY_RESTORED',
-      entity: {
-        type: 'category',
-        id: restoringCategory.id,
-        label: restoringCategory.name,
-      },
+      entity: { type: 'category', id: restoringCategory.id, label: restoringCategory.name },
     });
-
     setRestoringCategory(null);
   };
 
-  // Separar activas y archivadas
-  const activeCategories = (categories ?? []).filter((c) => !c.isArchived);
-  const archivedCategories =(categories ?? []).filter((c) => c.isArchived);
+  // RefreshButton espera FetchStatus con "success", CategoryContext usa "ready"
+  // Mapeamos para compatibilidad
+  const refreshStatus = status === 'ready' ? 'success' : status;
 
-          // destructure del contexto — agrega status, lastFetch, refresh
-
-
-// En el header, junto al botón "Nueva categoría"
+  const activeCategories = (categories ?? []).filter((c) => !c.deletedAt);
+const archivedCategories = (categories ?? []).filter((c) => !!c.deletedAt);
 
   return (
     <div className="space-y-6">
@@ -129,16 +119,15 @@ const handleArchive = async () => {
             Gestiona las categorías de productos de tu catálogo
           </p>
         </div>
-
-<div className="flex items-center gap-3">
-  <RefreshButton status={status} lastFetch={lastFetch} onRefresh={refresh} />
-  {canCreate && (
-    <Button onClick={() => setIsCreateDialogOpen(true)}>
-      <Plus className="w-4 h-4 mr-2" />
-      Nueva categoría
-    </Button>
-  )}
-</div>
+        <div className="flex items-center gap-3">
+          <RefreshButton status={refreshStatus as any} lastFetch={lastFetch} onRefresh={refresh} />
+          {canCreate && (
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva categoría
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabla de categorías activas */}

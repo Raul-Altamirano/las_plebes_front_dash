@@ -9,8 +9,9 @@ export type { Category };
 
 const BASE = "/categories";
 
-export async function listCategories() {
-  return apiFetch<{ items: Category[] }>(BASE, {
+export async function listCategories(includeDeleted = false) {
+  const qs = includeDeleted ? '?includeDeleted=true' : '';
+  return apiFetch<{ items: Category[] }>(`${BASE}${qs}`, {
     label: "categories.list",
   });
 }
@@ -41,5 +42,13 @@ export async function deleteCategory(id: string) {
   return apiFetch<{ ok: true }>(`${BASE}/${id}`, {
     method: "DELETE",
     label: "categories.delete",
+  });
+  
+}
+
+export async function restoreCategory(id: string) {
+  return apiFetch<{ status: string; data: Category }>(`${BASE}/${id}/restore`, {
+    method: "PATCH",
+    label: "categories.restore",
   });
 }
