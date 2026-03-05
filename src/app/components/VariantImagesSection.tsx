@@ -7,6 +7,8 @@ interface VariantImagesSectionProps {
   variants: ProductVariant[];
   productImages: ProductImage[];
   onVariantImagesChange: (variantId: string, images: ProductImage[]) => void;
+    onVariantUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
+
   productId?: string;
 }
 
@@ -15,6 +17,7 @@ export function VariantImagesSection({
   variants, 
   productImages,
   onVariantImagesChange,
+    onVariantUploadRef,
   productId 
 }: VariantImagesSectionProps) {
   // Si no tiene variantes, mostrar mensaje
@@ -96,6 +99,8 @@ export function VariantImagesSection({
                     productImages={productImages}
                     onChange={onVariantImagesChange}
                     productId={productId}
+                      onUploadRef={onVariantUploadRef}  // ← agrega esta línea
+
                   />
                 ))}
               </div>
@@ -112,6 +117,8 @@ export function VariantImagesSection({
               productImages={productImages}
               onChange={onVariantImagesChange}
               productId={productId}
+                onUploadRef={onVariantUploadRef}  // ← agrega esta línea
+
             />
           ))}
         </div>

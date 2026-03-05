@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import { Copy, Star, Trash2, Upload, ImageIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react'; // ← línea 1: agrega useRef y useEffect
+import { Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react'; // ← limpia imports no usados
 import type { ProductImage, ProductVariant } from '../types/product';
 import { ImagePickerV2 } from './ImagePickerV2';
 
 interface VariantImagePickerProps {
   variant: ProductVariant;
-  productImages: ProductImage[]; // Imágenes del producto padre (fallback)
+  productImages: ProductImage[];
   onChange: (variantId: string, images: ProductImage[]) => void;
+  onUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void; // ← agrega
   productId?: string;
 }
 
@@ -14,19 +15,29 @@ export function VariantImagePicker({
   variant, 
   productImages, 
   onChange,
+  onUploadRef, // ← agrega
   productId 
 }: VariantImagePickerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null); // ← agrega
+
+  // Registrar uploadRef cuando monta
+  useEffect(() => {
+    if (onUploadRef) {
+      onUploadRef(variant.id, async () => {
+        if (uploadRef.current) return uploadRef.current();
+        return null;
+      });
+    }
+  }, [variant.id, onUploadRef]); // ← agrega este useEffect completo
   
   const variantImages = variant.images || [];
   const hasOwnImages = variantImages.length > 0;
-  const displayImages = hasOwnImages ? variantImages : productImages;
 
   const handleCopyFromProduct = () => {
-    // Copiar imágenes del producto a la variante
     const copiedImages = productImages.map(img => ({
       ...img,
-      id: `${variant.id}-${img.id}`, // Nuevo ID único para la variante
+      id: `${variant.id}-${img.id}`,
     }));
     onChange(variant.id, copiedImages);
   };
@@ -39,7 +50,6 @@ export function VariantImagePicker({
     onChange(variant.id, images);
   };
 
-  // Label de la variante
   const variantLabel = [
     variant.color && `Color: ${variant.color}`,
     variant.size && `Talla: ${variant.size}`,
@@ -50,7 +60,6 @@ export function VariantImagePicker({
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
-      {/* Header - Collapsible */}
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -74,7 +83,6 @@ export function VariantImagePicker({
         </div>
         
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Indicador visual */}
           {hasOwnImages && (
             <div className="w-10 h-10 rounded border-2 border-blue-500 overflow-hidden flex-shrink-0">
               <img 
@@ -84,7 +92,6 @@ export function VariantImagePicker({
               />
             </div>
           )}
-          
           {isExpanded ? (
             <ChevronUp className="w-5 h-5 text-gray-400" />
           ) : (
@@ -93,10 +100,8 @@ export function VariantImagePicker({
         </div>
       </button>
 
-      {/* Content - Expandible */}
       {isExpanded && (
         <div className="p-4 bg-white border-t border-gray-200">
-          {/* Actions */}
           <div className="flex items-center gap-2 mb-4">
             <button
               type="button"
@@ -120,16 +125,16 @@ export function VariantImagePicker({
             )}
           </div>
 
-          {/* Image Picker */}
-<ImagePickerV2
-  images={variantImages}
-  onChange={handleImagesChange}
-  maxImages={6}
-  productId={productId}
-  variantSku={variant.sku}  // ← agrega
-/>
+          {/* ← uploadRef agregado aquí */}
+          <ImagePickerV2
+            images={variantImages}
+            onChange={handleImagesChange}
+            maxImages={6}
+            productId={productId}
+            variantSku={variant.sku}
+            uploadRef={uploadRef}
+          />
 
-          {/* Fallback Info */}
           {!hasOwnImages && productImages.length > 0 && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
               <p className="text-xs text-blue-800">

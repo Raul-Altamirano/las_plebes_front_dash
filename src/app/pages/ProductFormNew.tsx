@@ -79,6 +79,8 @@ export function ProductForm() {
 
   const isEdit = Boolean(id);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
+
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -88,11 +90,20 @@ export function ProductForm() {
   const canPublish = hasPermission("product:publish");
   const canUploadMedia = hasPermission("media:upload");
   const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
+  const variantUploadRefs = useRef<
+    Map<string, () => Promise<ProductImage[] | null>>
+  >(new Map());
 
   // Modo "stock-only" para rol OPS
   const isStockOnlyMode = !canUpdateProduct && canUpdateInventory;
 
   // Get active categories
+  const handleVariantUploadRef = (
+    variantId: string,
+    ref: () => Promise<ProductImage[] | null>,
+  ) => {
+    variantUploadRefs.current.set(variantId, ref);
+  };
   const activeCategories = categories.filter((c) => c.status === "ACTIVE");
 
   // Form state
@@ -116,22 +127,22 @@ export function ProductForm() {
 
   // Producto original (para detectar cambios y audit)
   const [originalProduct, setOriginalProduct] = useState<Product | null>(null);
-const [initialized, setInitialized] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   // Load product data in edit mode
-useEffect(() => {
-  if (isEdit && id && !initialized) {
-    const product = getById(id);
-    if (product) {
-      setFormData(product);
-      setOriginalProduct(product);
-      setInitialized(true);
-    } else {
-      showToast('error', 'Producto no encontrado');
-      navigate('/products');
+  useEffect(() => {
+    if (isEdit && id && !initialized) {
+      const product = getById(id);
+      if (product) {
+        setFormData(product);
+        setOriginalProduct(product);
+        setInitialized(true);
+      } else {
+        showToast("error", "Producto no encontrado");
+        navigate("/products");
+      }
     }
-  }
-}, [id, isEdit, initialized, getById, navigate, showToast]);
+  }, [id, isEdit, initialized, getById, navigate, showToast]);
 
   // Track form changes
   useEffect(() => {
@@ -223,10 +234,56 @@ useEffect(() => {
     }
 
     setIsLoading(true);
-
+    setLoadingMessage("Preparando imágenes...");
+    console.log(
+      "[variantImages] updatedVariants antes del for:",
+      (formData.variants || []).map((v) => ({
+        id: v.id,
+        sku: v.sku,
+        images: (v.images || []).map((i) => ({ id: i.id, key: i.key })),
+      })),
+    );
     // ─── Candado: detectar cambios ────────────────────────────────────────────
     const uploadedImages = uploadRef.current ? await uploadRef.current() : null;
     const hasImageChanges = uploadedImages !== null;
+
+    const updatedVariants = [...(formData.variants || [])];
+    console.log(
+      "[variantImages] updatedVariants:",
+      JSON.stringify(
+        updatedVariants.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          images: v.images,
+        })),
+        null,
+        2,
+      ),
+    );
+
+    for (let i = 0; i < updatedVariants.length; i++) {
+      const variant = updatedVariants[i];
+      const variantUpload = variantUploadRefs.current.get(variant.id);
+      if (variantUpload) {
+        const variantImages = await variantUpload();
+        console.log("[variantImages] resultado:", variant.sku, variantImages); // ← agrega
+        if (variantImages !== null) {
+          updatedVariants[i] = { ...variant, images: variantImages };
+        }
+      }
+    }
+
+    setLoadingMessage(isEdit ? 'Actualizando producto...' : 'Creando producto...');
+
+
+    console.log(
+      "[variantImages] updatedVariants FINAL:", // ← mueve aquí
+      updatedVariants.map((v) => ({
+        id: v.id,
+        sku: v.sku,
+        images: (v.images || []).map((i) => ({ id: i.id, key: i.key })),
+      })),
+    );
 
     const hasFieldChanges =
       isEdit && originalProduct
@@ -264,7 +321,20 @@ useEffect(() => {
       formData.variants,
     );
 
-    if (isEdit && !hasFieldChanges && !hasImageChanges && !hasVariantChanges) {
+    const hasVariantImageChanges = updatedVariants.some((v, i) => {
+      const orig = originalProduct?.variants?.[i];
+      return (
+        JSON.stringify(v.images ?? []) !== JSON.stringify(orig?.images ?? [])
+      );
+    });
+
+    if (
+      isEdit &&
+      !hasFieldChanges &&
+      !hasImageChanges &&
+      !hasVariantChanges &&
+      !hasVariantImageChanges
+    ) {
       showToast("info", "No hay cambios que guardar");
       setIsLoading(false);
       return;
@@ -283,7 +353,7 @@ useEffect(() => {
         updatedAt: new Date().toISOString(),
         isArchived: originalProduct?.isArchived || false,
         hasVariants: formData.hasVariants || false,
-        variants: formData.variants || [],
+        variants: updatedVariants,
         cost: formData.cost,
         trackCost: formData.trackCost !== undefined ? formData.trackCost : true,
       };
@@ -298,12 +368,13 @@ useEffect(() => {
 
       setIsDirty(false);
       navigate("/products");
-    } catch (error) {
-      console.error("[handleSubmit] Error:", error);
-      showToast("error", "Error al guardar el producto");
-    } finally {
-      setIsLoading(false);
-    }
+} catch (error) {
+  console.error("[handleSubmit] Error:", error);
+  showToast("error", "Error al guardar el producto");
+} finally {
+  setIsLoading(false);
+  setLoadingMessage('');
+}
   };
 
   // Submit para modo stock-only
@@ -972,6 +1043,7 @@ useEffect(() => {
             productImages={formData.images || []}
             onVariantImagesChange={handleVariantImagesChange}
             productId={id}
+            onVariantUploadRef={handleVariantUploadRef}
           />
         </div>
       )}
@@ -1015,7 +1087,17 @@ useEffect(() => {
           </button>
         </div>
       </div>
-
+{/* Loading Modal */}
+{isLoading && (
+  <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4 min-w-[260px]">
+      <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+      <p className="text-sm font-medium text-gray-700">
+        {loadingMessage || 'Guardando...'}
+      </p>
+    </div>
+  </div>
+)}
       {/* Discard Dialog */}
       <ConfirmDialog
         isOpen={showDiscardDialog}
