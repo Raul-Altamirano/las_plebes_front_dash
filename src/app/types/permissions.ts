@@ -44,7 +44,8 @@ export type Permission =
   | 'settings:read'
   | 'audit:read'
   | 'audit:purge'      // Purgar eventos antiguos
-  | 'report:export';   // Exportar reportes con datos sensibles
+  | 'report:export'
+  | 'meta:read';   // Exportar reportes con datos sensibles
 
 // Roles del sistema
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'CATALOG' | 'OPS' | 'VIEWER';

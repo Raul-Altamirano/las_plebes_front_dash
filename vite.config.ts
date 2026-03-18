@@ -28,6 +28,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/marketing/, ""),
       },
+      "/api/meta": {
+        target: "https://mrc94l3hc6.execute-api.us-east-1.amazonaws.com",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/meta/, "/api/v1/meta"),
+      },
     },
   },
 })

@@ -15,6 +15,10 @@
     {
       "source": "/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/api/meta/:path*",
+      "destination": "https://mrc94l3hc6.execute-api.us-east-1.amazonaws.com/api/v1/meta/:path*"
     }
   ]
 }

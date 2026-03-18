@@ -13,6 +13,7 @@ import {
   RefreshCw,
   MapPin
 } from 'lucide-react';
+import { Share2 } from 'lucide-react'; // agregar al import de lucide
 import { useAuth } from '../store/AuthContext';
 import logo from '../../assets/logo_las_plabes.jpg';
 
@@ -24,6 +25,7 @@ const menuItems = [
   { path: '/coupons', label: 'Cupones', icon: Ticket, disabled: false, permission: 'coupon:read' as const },
   { path: '/orders', label: 'Pedidos', icon: ShoppingCart, disabled: false, permission: 'order:read' as const },
   { path: '/rma', label: 'Cambios/Devoluciones', icon: RefreshCw, disabled: false, permission: 'rma:read' as const },
+  { path: '/marketplaces', label: 'Marketplaces', icon: Share2, disabled: false, permission: 'meta:read' as const }, // 👈 agregar
   { path: '/coverage', label: 'Cobertura', icon: MapPin, disabled: false, permission: 'coverage:read' as const },
   { path: '/customers', label: 'Clientes', icon: UserCircle, disabled: false, permission: 'customer:read' as const },
   { path: '/users', label: 'Usuarios y Roles', icon: Users, disabled: false, anyPermission: ['user:manage', 'role:manage'] as const },
