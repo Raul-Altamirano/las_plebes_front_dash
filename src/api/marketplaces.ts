@@ -38,10 +38,16 @@ export interface CatalogProduct {
 }
 
 export async function getPublishedProducts(): Promise<PublishedProduct[]> {
-  const res = await apiFetch<{ status: string; data: PublishedProduct[] }>(
-    '/products', { label: 'meta.getPublished' }
-  );
-  return res.data;
+  try {
+    const res = await apiFetch<{ status: string; data: PublishedProduct[] }>(
+      '/products', { label: 'meta.getPublished' }
+    );
+    console.log('[meta.getPublished] raw res:', res);  // 👈
+    return res?.data ?? [];
+  } catch (err) {
+    console.error('[meta.getPublished] error:', err);
+    return [];
+  }
 }
 
 export async function syncProductApi(productId: string): Promise<PublishedProduct> {
