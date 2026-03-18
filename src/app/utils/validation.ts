@@ -1,4 +1,6 @@
 import type { Product, ProductStatus } from '../types/product';
+import { buildSkuRegex, buildSkuPlaceholder } from '../config/skuConfig';
+import { SKU_CONFIG } from '../config/skuConfig';
 
 export interface ValidationError {
   field: string;
@@ -74,14 +76,21 @@ export function validateProductDraft(product: Partial<Product>, allProducts: Pro
     // Sin variantes — SKU del producto requerido
     if (!product.sku || product.sku.trim() === '') {
       errors.push({ field: 'sku', message: 'El SKU es requerido' });
-    } else {
-      const isDuplicate = allProducts.some(
-        p => p.sku?.toLowerCase() === product.sku!.toLowerCase() && p.id !== currentId
-      );
-      if (isDuplicate) {
-        errors.push({ field: 'sku', message: 'Este SKU ya está en uso' });
-      }
-    }
+} else {
+  const isDuplicate = allProducts.some(
+    p => p.sku?.toLowerCase() === product.sku!.toLowerCase() && p.id !== currentId
+  );
+  if (isDuplicate) {
+    errors.push({ field: 'sku', message: 'Este SKU ya está en uso' });
+  }
+  // ← AGREGA AQUÍ:
+  if (!buildSkuRegex().test(product.sku!)) {
+    errors.push({ 
+      field: 'sku', 
+      message: `Formato inválido. Esperado: ${buildSkuPlaceholder()}` 
+    });
+  }
+}
     if (product.stock !== undefined && product.stock < 0) {
       errors.push({ field: 'stock', message: 'El stock no puede ser negativo' });
     }

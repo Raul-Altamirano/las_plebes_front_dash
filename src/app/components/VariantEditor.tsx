@@ -7,6 +7,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ProductVariant } from "../types/product";
 import { useProductsStore } from "../store/ProductsContext";
+import { ColorPicker } from "./ColorPicker";
 
 interface VariantEditorProps {
   variants: ProductVariant[];
@@ -21,6 +22,7 @@ interface VariantEditorProps {
   onToggleVariants?: (enabled: boolean) => void;
   onStockChange?: (totalStock: number) => void;
   variantErrors?: Record<string, string>;
+  disableSku?: boolean;
 }
 
 export function VariantEditor({
@@ -34,6 +36,7 @@ export function VariantEditor({
   hasVariants = false,
   onToggleVariants,
   onStockChange,
+  disableSku = false,
   variantErrors = {},
 }: VariantEditorProps) {
   const { isSkuAvailable } = useProductsStore();
@@ -69,6 +72,7 @@ export function VariantEditor({
 
   const addVariant = () => {
     const newVariant: ProductVariant = {
+      colorHex: "#000000",
       id: Math.random().toString(36).substring(7),
       sku: `${productSku}-VAR-${variants.length + 1}`,
       size: undefined,
@@ -140,6 +144,7 @@ export function VariantEditor({
             size: size,
             color: color,
             stock: 0,
+            colorHex: "#000000", // ← agrega
             updatedAt: new Date().toISOString(),
           });
         });
@@ -154,6 +159,7 @@ export function VariantEditor({
           sku: `${productSku}-${sizeCode}`,
           size: size,
           stock: 0,
+          colorHex: "#000000", // ← agrega
           updatedAt: new Date().toISOString(),
         });
       }); // ← y el cierre
@@ -167,6 +173,7 @@ export function VariantEditor({
           sku: `${productSku}-${colorCode}`,
           color: color,
           stock: 0,
+          colorHex: "#000000", // ← agrega
           updatedAt: new Date().toISOString(),
         });
       }); // ← y el cierre
@@ -371,16 +378,36 @@ export function VariantEditor({
                         <Label htmlFor={`variant-sku-${index}`}>
                           SKU <span className="text-red-500">*</span>
                         </Label>
-                        <Input
-                          id={`variant-sku-${index}`}
-                          placeholder="BV-001-25-NEG"
-                          value={variant.sku}
-                          onChange={(e) =>
-                            updateVariant(index, "sku", e.target.value)
-                          }
-                          className={skuError ? "border-red-500" : ""}
-                          disabled={disabled}
-                        />
+                        <div className="flex items-center gap-1">
+                          {/* Prefijo no editable: MARCA-NUMERO */}
+                          <span className="px-2 py-2 text-xs bg-gray-100 border border-gray-300 rounded-lg text-gray-500 whitespace-nowrap">
+                            {productSku.split("-").slice(0, 2).join("-")}-
+                          </span>
+                          {/* SIZE-VERSION editable */}
+                          <Input
+                            id={`variant-sku-${index}`}
+                            placeholder="25-01"
+                            value={
+                              variant.sku?.split("-").slice(2).join("-") || ""
+                            }
+                            onChange={(e) => {
+                              const suffix = e.target.value
+                                .toUpperCase()
+                                .replace(/[^0-9-]/g, "");
+                              const parentBase = productSku
+                                .split("-")
+                                .slice(0, 2)
+                              updateVariant(
+                                index,
+                                "sku",
+                                `${parentBase}-${suffix}`,
+                              );
+                            }}
+                            className={skuError ? "border-red-500" : ""}
+                            disabled={disabled || disableSku}
+                            maxLength={9}
+                          />
+                        </div>
                         {skuError && (
                           <p className="text-xs text-red-500 mt-1">
                             {skuError}
@@ -433,6 +460,17 @@ export function VariantEditor({
                             ? `$${variant.price}`
                             : `Heredado: $${productPrice}`}
                         </p>
+                      </div>
+                      {/* Segunda fila: Color Hex */}
+                      <div className="col-span-12 border-t pt-3">
+                        <ColorPicker
+                          label="Color visual"
+                          value={variant.colorHex || "#000000"}
+                          onChange={(color) =>
+                            updateVariant(index, "colorHex", color)
+                          }
+                          disabled={disabled}
+                        />
                       </div>
 
                       {/* Delete */}

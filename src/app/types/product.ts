@@ -18,6 +18,7 @@ export interface ProductVariant {
   color?: string;      // mantener para compatibilidad con BE
   price?: number;
   cost?: number;
+  colorHex?: string;
   stock: number;
   images?: ProductImage[];
   updatedAt?: string;
@@ -39,7 +40,8 @@ export interface Product {
   hasVariants?: boolean;
   variants?: ProductVariant[];
   trackCost?: boolean;
-    isArchived?: boolean;           // <-- added property
+  isArchived?: boolean;           // <-- added property
+  colorHex?: string;
   createdAt: string;
   updatedAt: string;
 }

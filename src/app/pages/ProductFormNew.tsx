@@ -12,13 +12,14 @@ import {
 } from "lucide-react";
 import { useProductsStore } from "../store/ProductsContext";
 import { useCategories } from "../store/CategoryContext";
+import { ColorPicker } from "../components/ColorPicker";
 import { useToast } from "../store/ToastContext";
 import { useAuth } from "../store/AuthContext";
 import { useAudit } from "../store/AuditContext";
 import { ImagePickerV2 } from "../components/ImagePickerV2";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RequirePermission } from "../components/RequirePermission";
-
+import { SKU_CONFIG, buildSkuRegex, buildSkuPlaceholder } from '../config/skuConfig';
 import { VariantEditor } from "../components/VariantEditor";
 import { VariantImagesSection } from "../components/VariantImagesSection"; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
 import {
@@ -61,6 +62,7 @@ const haveVariantsChanged = (
       variant.price !== orig.price ||
       variant.stock !== orig.stock ||
       variant.cost !== orig.cost ||
+      variant.colorHex !== orig.colorHex ||
       JSON.stringify((variant.images ?? []).map((i) => i.id).sort()) !==
         JSON.stringify((orig.images ?? []).map((i) => i.id).sort())
     );
@@ -113,6 +115,7 @@ export function ProductForm() {
     price: 0,
     stock: 0,
     status: "DRAFT",
+    colorHex: "#000000",
     categoryId: activeCategories.length > 0 ? activeCategories[0].id : null,
     descriptionShort: "",
     images: [],
@@ -273,8 +276,9 @@ export function ProductForm() {
       }
     }
 
-    setLoadingMessage(isEdit ? 'Actualizando producto...' : 'Creando producto...');
-
+    setLoadingMessage(
+      isEdit ? "Actualizando producto..." : "Creando producto...",
+    );
 
     console.log(
       "[variantImages] updatedVariants FINAL:", // ← mueve aquí
@@ -296,7 +300,8 @@ export function ProductForm() {
           formData.cost !== originalProduct.cost ||
           formData.status !== originalProduct.status ||
           formData.trackCost !== originalProduct.trackCost ||
-          formData.hasVariants !== originalProduct.hasVariants
+          formData.hasVariants !== originalProduct.hasVariants ||
+          formData.colorHex !== originalProduct.colorHex
         : true; // Si es creación, siempre hay "cambios"
     console.log("[handleSubmit] isEdit:", isEdit);
     console.log("[handleSubmit] hasImageChanges:", hasImageChanges);
@@ -355,6 +360,7 @@ export function ProductForm() {
         hasVariants: formData.hasVariants || false,
         variants: updatedVariants,
         cost: formData.cost,
+        colorHex: formData.colorHex || undefined,
         trackCost: formData.trackCost !== undefined ? formData.trackCost : true,
       };
 
@@ -368,13 +374,13 @@ export function ProductForm() {
 
       setIsDirty(false);
       navigate("/products");
-} catch (error) {
-  console.error("[handleSubmit] Error:", error);
-  showToast("error", "Error al guardar el producto");
-} finally {
-  setIsLoading(false);
-  setLoadingMessage('');
-}
+    } catch (error) {
+      console.error("[handleSubmit] Error:", error);
+      showToast("error", "Error al guardar el producto");
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage("");
+    }
   };
 
   // Submit para modo stock-only
@@ -498,6 +504,7 @@ export function ProductForm() {
               </label>
               <p className="text-gray-900">{originalProduct.sku}</p>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-500 mb-1">
                 Precio
@@ -657,31 +664,80 @@ export function ProductForm() {
                 </p>
               )}
             </div>
-
-            {/* SKU */}
+{/* SKU */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    SKU <span className="text-red-500">*</span>
+  </label>
+  {isEdit ? (
+    // En edición: no editable
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        value={formData.sku || ""}
+        disabled
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
+      />
+      <span className="text-xs text-gray-400 whitespace-nowrap">No editable</span>
+    </div>
+  ) : (
+    // En creación: autoformato
+    <input
+      type="text"
+      value={formData.sku || ""}
+      onChange={(e) => {
+        let val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        // Autoformato: insertar guiones automáticamente
+        const parts = val.replace(/-/g, '').split('');
+        let formatted = '';
+        const { prefix, numberDigits } = SKU_CONFIG;
+        const maxPrefix = 6;
+        // Segmento 1: prefix (hasta 6 letras)
+        // Segmento 2: número (5 dígitos)
+        // Segmento 3: size (2-4 dígitos)
+        // Segmento 4: version (2-4 dígitos)
+        const raw = val.replace(/-/g, '');
+        if (raw.length <= maxPrefix) {
+          formatted = raw;
+        } else if (raw.length <= maxPrefix + numberDigits) {
+          formatted = `${raw.slice(0, maxPrefix)}-${raw.slice(maxPrefix)}`;
+        } else if (raw.length <= maxPrefix + numberDigits + 4) {
+          formatted = `${raw.slice(0, maxPrefix)}-${raw.slice(maxPrefix, maxPrefix + numberDigits)}-${raw.slice(maxPrefix + numberDigits)}`;
+        } else {
+          const s3 = maxPrefix + numberDigits;
+          const s4 = s3 + 4;
+          formatted = `${raw.slice(0, maxPrefix)}-${raw.slice(maxPrefix, maxPrefix + numberDigits)}-${raw.slice(s3, s4)}-${raw.slice(s4, s4 + 4)}`;
+        }
+        handleChange("sku", formatted);
+      }}
+      className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
+        errors.sku ? "border-red-300 focus:ring-red-500" : "border-gray-300"
+      }`}
+      placeholder={buildSkuPlaceholder()}
+      maxLength={22}
+    />
+  )}
+  {errors.sku && (
+    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+      <AlertCircle className="w-4 h-4" />
+      {errors.sku}
+    </p>
+  )}
+  {!isEdit && (
+    <p className="mt-1 text-xs text-gray-500">
+      Formato: {buildSkuPlaceholder()} — no podrás cambiarlo después
+    </p>
+  )}
+</div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                SKU <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.sku || ""}
-                onChange={(e) =>
-                  handleChange("sku", e.target.value.toUpperCase())
-                }
-                className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                  errors.sku
-                    ? "border-red-300 focus:ring-red-500"
-                    : "border-gray-300"
-                }`}
-                placeholder="Ej: BV-001-BRN"
+              <ColorPicker
+                label="Color del producto"
+                value={formData.colorHex || "#000000"}
+                onChange={(color) => handleChange("colorHex", color)}
               />
-              {errors.sku && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-4 h-4" />
-                  {errors.sku}
-                </p>
-              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Color visual del SKU padre (se hereda a variantes por defecto)
+              </p>
             </div>
 
             {/* Category */}
@@ -1087,17 +1143,17 @@ export function ProductForm() {
           </button>
         </div>
       </div>
-{/* Loading Modal */}
-{isLoading && (
-  <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-    <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4 min-w-[260px]">
-      <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-      <p className="text-sm font-medium text-gray-700">
-        {loadingMessage || 'Guardando...'}
-      </p>
-    </div>
-  </div>
-)}
+      {/* Loading Modal */}
+      {isLoading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4 min-w-[260px]">
+            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+            <p className="text-sm font-medium text-gray-700">
+              {loadingMessage || "Guardando..."}
+            </p>
+          </div>
+        </div>
+      )}
       {/* Discard Dialog */}
       <ConfirmDialog
         isOpen={showDiscardDialog}
