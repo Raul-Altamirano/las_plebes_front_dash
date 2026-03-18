@@ -6,11 +6,11 @@
     },
     {
       "source": "/api/catalog-products/:path*",
-      "destination": "https://bwlbovwg5kruog7cw6njkkcntq0dwghe.lambda-url.us-east-1.on.aws/:path*"
+      "destination": "https://4hwgeresndp2ot6b4jb47f6imq0iqdwq.lambda-url.us-east-1.on.aws/:path*"
     },
     {
       "source": "/api/marketing/:path*",
-      "destination": "https://4hwgeresndp2ot6b4jb47f6imq0iqdwq.lambda-url.us-east-1.on.aws/:path*"
+      "destination": "https://yea4yna7pn626f4bmw6w5cnwdm0tuvgr.lambda-url.us-east-1.on.aws/:path*"
     },
     {
       "source": "/:path*",
