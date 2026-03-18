@@ -179,31 +179,37 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
 
   const loadFacebookProducts = async () => {
     try {
-      // Traer todos los productos del catálogo
       const [catalogRes, publishedProducts] = await Promise.all([
         listProducts({ limit: 200 }),
-        getPublishedProducts(),
+        getPublishedProducts().catch(() => []), // si Meta falla, no bloquea
       ]);
 
+      console.log("[Marketplaces] catalogRes:", catalogRes);
+      console.log("[Marketplaces] publishedProducts:", publishedProducts);
+
       const allProducts = catalogRes?.items ?? [];
-      const publishedIds = new Set(publishedProducts.map((p) => p._id));
+      console.log("[Marketplaces] allProducts count:", allProducts.length);
 
-      const statuses: ProductMarketplaceStatus[] = allProducts.map(
-        (product) => {
-          const published = publishedProducts.find(
-            (p) => p._id === (product as any)._id || p._id === product.id,
-          );
-          const fbStatus = published?.platforms?.facebook;
+const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
+  const pid = (product as any)._id ?? product.id ?? '';
+  const published = publishedProducts.find(p => p._id === pid);
+  const fbStatus  = published?.platforms?.facebook;
 
-          return mapToStatus(
-            { ...product, _id: (product as any)._id ?? product.id },
-            "FACEBOOK",
-            fbStatus?.syncStatus ?? "UNPUBLISHED",
-            fbStatus?.lastSyncedAt,
-            fbStatus?.errorMessage,
-          );
-        },
-      );
+  return mapToStatus(
+    {
+      _id:    pid,
+      name:   product.name,
+      sku:    product.sku    ?? '',
+      price:  product.price  ?? 0,
+      stock:  (product as any).stock ?? 0,
+      images: (product as any).images ?? [],
+    },
+    'FACEBOOK',
+    fbStatus?.syncStatus    ?? 'UNPUBLISHED',
+    fbStatus?.lastSyncedAt  ?? null,
+    fbStatus?.errorMessage  ?? null,
+  );
+});
 
       setState((prev) => ({
         ...prev,
@@ -215,7 +221,6 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, loading: false }));
     }
   };
-
   const refreshFacebook = async () => {
     setState((prev) => ({ ...prev, loading: true }));
     await loadFacebookProducts();
