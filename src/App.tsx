@@ -51,6 +51,9 @@ import { MarketplacesProvider } from "./app/store/MarketplacesContext";
 import { Marketplaces } from "./app/pages/Marketplaces";
 import { MarketplaceDetail } from "./app/pages/MarketplaceDetail";
 
+import { InboxProvider } from "./app/store/InboxContext";
+import { Inbox } from "./app/pages/Inbox";
+
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -276,6 +279,14 @@ function AppLayout() {
                   </RequirePermission>
                 }
               />
+              <Route
+                path="/inbox"
+                element={
+                  <RequirePermission permission="order:read">
+                    <Inbox />
+                  </RequirePermission>
+                }
+              />
             </Routes>
           </PageContainer>
         </main>
@@ -315,7 +326,9 @@ function App() {
                                     <OrdersProvider>
                                       <RMAProvider>
                                         <MarketplacesProvider>
-                                          <AppLayout />
+                                          <InboxProvider>
+                                            <AppLayout />
+                                          </InboxProvider>
                                         </MarketplacesProvider>
                                       </RMAProvider>
                                     </OrdersProvider>
