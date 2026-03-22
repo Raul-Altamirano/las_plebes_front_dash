@@ -85,6 +85,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string, tenantId?: string) => {
     const res = await identity.login({ email, password }, tenantId);
 
+      localStorage.removeItem(LS_USER);
+
+
     setAccessToken(res.accessToken);
     setAuthUser(res.user);
 

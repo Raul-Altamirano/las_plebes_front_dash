@@ -2,6 +2,11 @@ import { apiFetch } from "./api/http";
 import { health } from "./api/identity";
 import { AuthSmokeTest } from "./dev/AuthSmokeTest";
 
+// imports
+import { NotesProvider } from "./app/store/NotesContext";
+import { Notes } from "./app/pages/Notes";
+import { NoteForm } from "./app/components/NoteForm";
+
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router";
 import { ProductsProvider } from "./app/store/ProductsContext";
@@ -287,6 +292,14 @@ function AppLayout() {
                   </RequirePermission>
                 }
               />
+              <Route
+                path="/notes"
+                element={
+                  <RequirePermission permission="notes:read">
+                    <Notes />
+                  </RequirePermission>
+                }
+              />
             </Routes>
           </PageContainer>
         </main>
@@ -327,7 +340,9 @@ function App() {
                                       <RMAProvider>
                                         <MarketplacesProvider>
                                           <InboxProvider>
-                                            <AppLayout />
+                                            <NotesProvider>
+                                              <AppLayout />
+                                            </NotesProvider>
                                           </InboxProvider>
                                         </MarketplacesProvider>
                                       </RMAProvider>
