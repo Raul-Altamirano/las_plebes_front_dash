@@ -36,7 +36,7 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
   const [channelFilter, setChannelFilter] = useState<InboxChannel | 'ALL'>('ALL');
   const [statusFilter, setStatusFilter] = useState<InboxStatus | 'ALL' | 'URGENT'>('ALL');
 
-  const { logEvent } = useAudit();
+  const { auditLog  } = useAudit();
   const { currentUser } = useAuth();
 
   // ── Cargar desde localStorage o mock ────────────────────────────────────
@@ -70,7 +70,7 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
 
   // ── Helper de auditoría ──────────────────────────────────────────────────
   const audit = useCallback((action: any, convId: string, convName: string, meta?: any) => {
-    logEvent({
+    auditLog ({
       action,
       entityType: 'inbox_conversation' as any,
       entityId: convId,
@@ -80,7 +80,7 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
       userRole: currentUser?.role || 'ADMIN',
       metadata: meta,
     });
-  }, [logEvent, currentUser]);
+  }, [auditLog , currentUser]);
 
   // ── evaluateUrgency ──────────────────────────────────────────────────────
   const evaluateUrgency = useCallback((conversation: InboxConversation): UrgencyReason[] => {

@@ -669,8 +669,14 @@ export function ProductForm() {
   <label className="block text-sm font-medium text-gray-700 mb-1">
     SKU <span className="text-red-500">*</span>
   </label>
-  {isEdit ? (
-    // En edición: no editable
+  {(() => {
+  const hasImages =
+    (formData.images ?? []).length > 0 ||
+    (formData.variants ?? []).some(v => (v.images ?? []).length > 0);
+  const skuLocked = isEdit && hasImages;
+
+  return skuLocked ? (
+    // Edición CON imágenes: bloqueado
     <div className="flex items-center gap-2">
       <input
         type="text"
@@ -681,22 +687,16 @@ export function ProductForm() {
       <span className="text-xs text-gray-400 whitespace-nowrap">No editable</span>
     </div>
   ) : (
-    // En creación: autoformato
+    // Creación O edición SIN imágenes: editable con autoformato
     <input
       type="text"
       value={formData.sku || ""}
       onChange={(e) => {
         let val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-        // Autoformato: insertar guiones automáticamente
-        const parts = val.replace(/-/g, '').split('');
-        let formatted = '';
-        const { prefix, numberDigits } = SKU_CONFIG;
+        const { numberDigits } = SKU_CONFIG;
         const maxPrefix = 6;
-        // Segmento 1: prefix (hasta 6 letras)
-        // Segmento 2: número (5 dígitos)
-        // Segmento 3: size (2-4 dígitos)
-        // Segmento 4: version (2-4 dígitos)
         const raw = val.replace(/-/g, '');
+        let formatted = '';
         if (raw.length <= maxPrefix) {
           formatted = raw;
         } else if (raw.length <= maxPrefix + numberDigits) {
@@ -716,18 +716,27 @@ export function ProductForm() {
       placeholder={buildSkuPlaceholder()}
       maxLength={22}
     />
-  )}
-  {errors.sku && (
-    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-      <AlertCircle className="w-4 h-4" />
-      {errors.sku}
-    </p>
-  )}
-  {!isEdit && (
-    <p className="mt-1 text-xs text-gray-500">
-      Formato: {buildSkuPlaceholder()} — no podrás cambiarlo después
-    </p>
-  )}
+  );
+})()}
+{errors.sku && (
+  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+    <AlertCircle className="w-4 h-4" />
+    {errors.sku}
+  </p>
+)}
+{isEdit && !(
+  (formData.images ?? []).length > 0 ||
+  (formData.variants ?? []).some(v => (v.images ?? []).length > 0)
+) && (
+  <p className="mt-1 text-xs text-amber-600">
+    Sin imágenes — puedes editar el SKU. Se bloqueará al agregar imágenes.
+  </p>
+)}
+{!isEdit && (
+  <p className="mt-1 text-xs text-gray-500">
+    Formato: {buildSkuPlaceholder()} — no podrás cambiarlo una vez tengas imágenes
+  </p>
+)}
 </div>
             <div>
               <ColorPicker

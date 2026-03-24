@@ -24,7 +24,7 @@ const TENANT_ID = 'las-plebes';
 export function NotesProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const { currentUser } = useAuth();
-  const { logEvent } = useAudit();
+  const { auditLog  } = useAudit();
 
   // ── Cargar desde localStorage o mock ────────────────────────────────────
   useEffect(() => {
@@ -50,7 +50,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
   // ── Helper de auditoría ──────────────────────────────────────────────────
   const audit = (action: any, noteId: string, noteTitle: string, meta?: any) => {
-    logEvent({
+    auditLog ({
       action,
       entityType: 'note',
       entityId: noteId,

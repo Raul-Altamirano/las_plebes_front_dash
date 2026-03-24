@@ -123,36 +123,36 @@ export function DataTable({ products, onClearFilters, selectedIds, onSelectionCh
 
   // Duplicar producto
   const handleDuplicate = (product: Product) => {
-    const newProduct: Product = {
-      ...product,
-      id: `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `${product.name} (Copia)`,
-      sku: `${product.sku}-COPY-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-      status: 'DRAFT',
+  // Clonar sin imágenes — SKU limpio para que el usuario lo corrija
+  const { images, variants, ...rest } = product;
+  const newProduct: Product = {
+    ...rest,
+    id: `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    name: `${product.name} (Copia)`,
+    sku: `${product.sku?.split('-').slice(0, 2).join('-')}-00-00`, // hereda MARCA-NUMERO, size/version en 00
+    status: 'DRAFT',
+    stock: 0,
+    images: [],  // ← sin imágenes
+    isArchived: false,
+    updatedAt: new Date().toISOString(),
+    variants: (variants ?? []).map(v => ({
+      ...v,
+      id: Math.random().toString(36).substring(7),
+      images: [],  // ← sin imágenes de variante
       stock: 0,
-      isArchived: false,
-      updatedAt: new Date().toISOString(),
-    };
-    
-    createProduct(newProduct);
-    auditLog({
-      action: 'PRODUCT_CLONED',
-      entity: {
-        type: 'product',
-        id: newProduct.id,
-        label: newProduct.name,
-      },
-      metadata: {
-        sourceProductId: product.id,
-        sourceProductName: product.name,
-      },
-    });
-    
-    showToast('success', 'Producto duplicado correctamente');
-    
-    // Redirigir al edit del duplicado
-    navigate(`/products/${newProduct.id}/edit`);
+    })),
   };
+
+  createProduct(newProduct);
+  auditLog({
+    action: 'PRODUCT_CLONED',
+    entity: { type: 'product', id: newProduct.id, label: newProduct.name },
+    metadata: { sourceProductId: product.id, sourceProductName: product.name },
+  });
+
+  showToast('success', 'Producto duplicado sin imágenes — agrega las tuyas');
+  navigate(`/products/${newProduct.id}/edit`);
+};
 
   // Helper para obtener nombre de categoría
   const getCategoryName = (categoryId: string | null) => {
