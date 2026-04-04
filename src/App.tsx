@@ -6,6 +6,8 @@ import { AuthSmokeTest } from "./dev/AuthSmokeTest";
 import { NotesProvider } from "./app/store/NotesContext";
 import { Notes } from "./app/pages/Notes";
 import { NoteForm } from "./app/components/NoteForm";
+import { TermsAndConditions } from './app/pages/TermsAndConditions';
+
 
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router";
@@ -58,6 +60,10 @@ import { MarketplaceDetail } from "./app/pages/MarketplaceDetail";
 
 import { InboxProvider } from "./app/store/InboxContext";
 import { Inbox } from "./app/pages/Inbox";
+
+import { AppProvider } from "./app/store/AppContext";
+import { PaymentsProvider } from "./app/store/PaymentsContext";
+import { Payments } from "./app/pages/Payments";
 
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -117,6 +123,7 @@ function AppLayout() {
         <main className="flex-1">
           <PageContainer>
             <Routes>
+
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/products" element={<Products />} />
@@ -300,6 +307,14 @@ function AppLayout() {
                   </RequirePermission>
                 }
               />
+              <Route
+                path="/payments"
+                element={
+                  <RequirePermission permission="settings:read">
+                    <Payments />
+                  </RequirePermission>
+                }
+              />
             </Routes>
           </PageContainer>
         </main>
@@ -311,57 +326,65 @@ function AppLayout() {
 function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <ToastProvider>
-          <RolesProvider>
-            <UsersProvider>
-              <Routes>
-                <Route
-                  path="/login"
-                  element={
-                    <PublicOnly>
-                      <Login />
-                    </PublicOnly>
-                  }
-                />
+      <AppProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <RolesProvider>
+              <UsersProvider>
+                <Routes>
+                  <Route
+                    path="/login"
+                    element={
+                      <PublicOnly>
+                        <Login />
+                      </PublicOnly>
+                    }
+                  />
+<Route path="/terms" element={<TermsAndConditions />} />
 
-                <Route
-                  path="/*"
-                  element={
-                    <RequireAuth>
-                      <AuditProvider>
-                        <ProductsProvider>
-                          <CategoriesProvider>
-                            <PromotionsProvider>
-                              <CouponsProvider>
-                                <CustomersProvider>
-                                  <CoverageProvider>
-                                    <OrdersProvider>
-                                      <RMAProvider>
-                                        <MarketplacesProvider>
-                                          <InboxProvider>
-                                            <NotesProvider>
-                                              <AppLayout />
-                                            </NotesProvider>
-                                          </InboxProvider>
-                                        </MarketplacesProvider>
-                                      </RMAProvider>
-                                    </OrdersProvider>
-                                  </CoverageProvider>
-                                </CustomersProvider>
-                              </CouponsProvider>
-                            </PromotionsProvider>
-                          </CategoriesProvider>
-                        </ProductsProvider>
-                      </AuditProvider>
-                    </RequireAuth>
-                  }
-                />
-              </Routes>
-            </UsersProvider>
-          </RolesProvider>
-        </ToastProvider>
-      </AuthProvider>
+                  <Route
+
+                  
+                    path="/*"
+                    element={
+                      
+                      <RequireAuth>
+                        <AuditProvider>
+                          <ProductsProvider>
+                            <CategoriesProvider>
+                              <PromotionsProvider>
+                                <CouponsProvider>
+                                  <CustomersProvider>
+                                    <CoverageProvider>
+                                      <OrdersProvider>
+                                        <RMAProvider>
+                                          <MarketplacesProvider>
+                                            <InboxProvider>
+                                              <NotesProvider>
+                                                <PaymentsProvider>
+                                                  <AppLayout />
+                                                </PaymentsProvider>
+                                              </NotesProvider>
+                                            </InboxProvider>
+                                          </MarketplacesProvider>
+                                        </RMAProvider>
+                                      </OrdersProvider>
+                                    </CoverageProvider>
+                                  </CustomersProvider>
+                                </CouponsProvider>
+                              </PromotionsProvider>
+                            </CategoriesProvider>
+                          </ProductsProvider>
+                        </AuditProvider>
+                      </RequireAuth>
+                    }
+                  />
+                </Routes>
+              </UsersProvider>
+            </RolesProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </AppProvider>
     </ErrorBoundary>
   );
 }

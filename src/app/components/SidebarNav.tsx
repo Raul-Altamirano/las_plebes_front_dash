@@ -13,7 +13,9 @@ import {
   RefreshCw,
   MapPin,
   Share2,
-  MessageSquare, StickyNote
+  MessageSquare, 
+  StickyNote,
+  CreditCard
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 import logo from '../../assets/logo_las_plabes.jpg';
@@ -28,6 +30,7 @@ const menuItems = [
   { path: '/rma', label: 'Cambios/Devoluciones', icon: RefreshCw, disabled: false, permission: 'rma:read' as const },
   { path: '/notes', label: 'Notas', icon: StickyNote, disabled: false, permission: 'notes:read' as const },
   { path: '/marketplaces', label: 'Marketplaces', icon: Share2, disabled: false, permission: 'meta:read' as const }, // 👈 agregar
+  { path: '/payments', label: 'Pagos', icon: CreditCard, disabled: false, permission: 'settings:read' as const },
   { path: '/inbox', label: 'Inbox', icon: MessageSquare, disabled: false, permission: 'order:read' as const },
   { path: '/coverage', label: 'Cobertura', icon: MapPin, disabled: false, permission: 'coverage:read' as const },
   { path: '/customers', label: 'Clientes', icon: UserCircle, disabled: false, permission: 'customer:read' as const },
