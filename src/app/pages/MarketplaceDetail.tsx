@@ -111,6 +111,25 @@ export function MarketplaceDetail() {
     }
   }, []);
 
+  // ← AGREGA ESTE SEGUNDO useEffect JUSTO AQUÍ ABAJO
+  useEffect(() => {
+    if (platform === "FACEBOOK" && connection?.status === "CONNECTED") {
+      const token = localStorage.getItem("accessToken");
+      fetch(`${META_LAMBDA_URL}/auth/facebook/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          const fb = data.data;
+          if (fb?.catalogs?.length > 0) {
+            setCatalogs(fb.catalogs);
+            setSelectedCatalog(fb.catalogId || fb.catalogs[0].id);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [platform, connection?.status]);
+
   const handleSaveCatalog = async () => {
     setSavingCatalog(true);
     try {
@@ -340,26 +359,28 @@ export function MarketplaceDetail() {
           </div>
         )}
         {/* Banner sin catálogo */}
-{connection.status === 'CONNECTED' && catalogs.length === 0 && (
-  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">
-    <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-    <div>
-      <p className="font-medium text-orange-800">Sin catálogo de productos</p>
-      <p className="text-sm text-orange-700 mt-1">
-        Tu página no tiene un catálogo de productos en Facebook.
-        Para sincronizar productos necesitas crear uno.
-      </p>
-      <a
-        href="https://business.facebook.com/commerce"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-orange-700 underline mt-1 inline-block"
-      >
-        Crear catálogo en Facebook →
-      </a>
-    </div>
-  </div>
-)}
+        {connection.status === "CONNECTED" && catalogs.length === 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-orange-800">
+                Sin catálogo de productos
+              </p>
+              <p className="text-sm text-orange-700 mt-1">
+                Tu página no tiene un catálogo de productos en Facebook. Para
+                sincronizar productos necesitas crear uno.
+              </p>
+              <a
+                href="https://business.facebook.com/commerce"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-orange-700 underline mt-1 inline-block"
+              >
+                Crear catálogo en Facebook →
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Stats rápidas */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
