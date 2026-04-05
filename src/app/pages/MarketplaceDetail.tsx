@@ -65,6 +65,8 @@ export function MarketplaceDetail() {
     useState(false);
   const [syncingProductId, setSyncingProductId] = useState<string | null>(null);
 
+  const [refreshingCatalogs, setRefreshingCatalogs] = useState(false);
+
   // ── OAuth callback detection ─────────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
   const [catalogs, setCatalogs] = useState<{ id: string; name: string }[]>([]);
@@ -260,6 +262,38 @@ export function MarketplaceDetail() {
     }
   };
 
+  const handleRefreshCatalogs = async () => {
+    setRefreshingCatalogs(true);
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch(
+        `${META_LAMBDA_URL}/auth/facebook/refresh-catalogs`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const data = await res.json();
+      if (data.status === "ok" && data.data.catalogs.length > 0) {
+        setCatalogs(data.data.catalogs);
+        setSelectedCatalog(data.data.catalogId);
+        showToast(
+          "success",
+          `${data.data.catalogs.length} catálogo(s) encontrado(s)`,
+        );
+      } else {
+        showToast(
+          "error",
+          "No se encontraron catálogos — crea uno en Facebook primero",
+        );
+      }
+    } catch {
+      showToast("error", "Error al actualizar catálogos");
+    } finally {
+      setRefreshingCatalogs(false);
+    }
+  };
+
   // Filtrar productos según tab y búsqueda
   const filteredProducts = productStatuses.filter((product) => {
     // Filtro por tab
@@ -362,7 +396,7 @@ export function MarketplaceDetail() {
         {connection.status === "CONNECTED" && catalogs.length === 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="font-medium text-orange-800">
                 Sin catálogo de productos
               </p>
@@ -370,14 +404,29 @@ export function MarketplaceDetail() {
                 Tu página no tiene un catálogo de productos en Facebook. Para
                 sincronizar productos necesitas crear uno.
               </p>
-              <a
-                href="https://business.facebook.com/commerce"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-orange-700 underline mt-1 inline-block"
-              >
-                Crear catálogo en Facebook →
-              </a>
+              <div className="flex items-center gap-3 mt-3">
+                <button
+                  onClick={handleRefreshCatalogs}
+                  disabled={refreshingCatalogs}
+                  className="flex items-center gap-2 text-sm bg-orange-600 text-white px-3 py-1.5 rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${refreshingCatalogs ? "animate-spin" : ""}`}
+                  />
+                  {refreshingCatalogs
+                    ? "Buscando..."
+                    : "Ya creé mi catálogo, actualizar"}
+                </button>
+
+                <a
+                  href="https://business.facebook.com/commerce"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-orange-700 underline"
+                >
+                  Crear catálogo en Facebook →
+                </a>
+              </div>
             </div>
           </div>
         )}
