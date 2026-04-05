@@ -90,11 +90,12 @@ export function MarketplaceDetail() {
       })
         .then((r) => r.json())
         .then((data) => {
-          const fb = data.data;
-          if (fb?.catalogs?.length > 0) {
-            setCatalogs(fb.catalogs);
-            setSelectedCatalog(fb.catalogId || fb.catalogs[0].id);
-          }
+console.log('[DEBUG] Facebook status:', JSON.stringify(data)); // ← agregar
+  const fb = data.data;
+  if (fb?.catalogs?.length > 0) {
+    setCatalogs(fb.catalogs);
+    setSelectedCatalog(fb.catalogId || fb.catalogs[0].id);
+  }
         })
         .catch(console.error);
     }
