@@ -70,7 +70,7 @@ setTimeout(() => console.log("after nav:", window.location.href), 50);
             <div className="flex items-center justify-center mx-auto mb-4">
               <img src={logo} alt="Las Plebes Logo" className="w-32 h-32 object-contain" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Dashboard Las Plebes</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Dashboard Xokly</h1>
             <p className="text-sm text-gray-600">Ingresa tus credenciales para continuar</p>
           </div>
 
