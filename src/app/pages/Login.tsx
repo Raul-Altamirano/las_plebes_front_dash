@@ -4,7 +4,7 @@ import { useAuth } from "../store/AuthContext";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Loader2, Mail, AlertCircle, Lock } from "lucide-react";
-import logo from "../../assets/logo_las_plabes.jpg";
+import logo from "../../assets/xokly-logo.jpg";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -148,7 +148,7 @@ setTimeout(() => console.log("after nav:", window.location.href), 50);
         </Card>
 
         <p className="text-center text-xs text-gray-500 mt-6">
-          Dashboard Las Plebes © {new Date().getFullYear()}
+          Dashboard Xokly © {new Date().getFullYear()}
         </p>
       </div>
     </div>
