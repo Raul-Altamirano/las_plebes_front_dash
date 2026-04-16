@@ -1,3 +1,4 @@
+// src/app/store/MarketplacesContext.tsx
 import React, {
   createContext,
   useContext,
@@ -18,6 +19,9 @@ import {
   syncProductApi,
   syncAllProductsApi,
   unpublishProductApi,
+  initFacebookOAuth,
+  disconnectFacebookApi,
+  getFacebookStatus,
 } from "../../api/marketplaces";
 import { listProducts } from "../../api/products";
 
@@ -63,16 +67,11 @@ interface MarketplacesContextValue extends MarketplacesState {
 const MarketplacesContext = createContext<MarketplacesContextValue | null>(
   null,
 );
-const STORAGE_KEY = "pochteca_marketplaces_connections";
+const STORAGE_KEY = "pochteca_marketplaces_connections_v2";
 
 // ─── Conexiones iniciales ────────────────────────────────────────────────────
 const INITIAL_CONNECTIONS: MarketplaceConnection[] = [
-  {
-    platform: "FACEBOOK",
-    status: "CONNECTED",
-    accountName: "Las Plebes",
-    connectedAt: new Date().toISOString(),
-  },
+  { platform: "FACEBOOK", status: "DISCONNECTED" },
   { platform: "INSTAGRAM", status: "DISCONNECTED" },
   { platform: "WHATSAPP", status: "DISCONNECTED" },
   { platform: "TIKTOK", status: "DISCONNECTED" },
@@ -157,6 +156,11 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
     } catch (_) {}
   }, []);
 
+  // ── Al montar: verificar estado real de Facebook en BE ──
+  useEffect(() => {
+    checkFacebookConnection();
+  }, []);
+
   // ── Cargar productos de Facebook desde BE al montar ──
   useEffect(() => {
     loadFacebookProducts();
@@ -177,6 +181,32 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
     }));
   }, [state.productStatuses]);
 
+  // ── Verificar conexión real de Facebook en el backend ──
+  const checkFacebookConnection = async () => {
+    try {
+      const fbStatus = await getFacebookStatus();
+      console.log('[MARKETPLACE] checkFacebookConnection — fbStatus:', fbStatus);
+      if (fbStatus.connected === true || fbStatus.status === "connected") {
+        setState((prev) => ({
+          ...prev,
+          connections: prev.connections.map((c) =>
+            c.platform === "FACEBOOK"
+              ? {
+                  ...c,
+                  status: "CONNECTED" as const,
+                  accountName: fbStatus.pageName || "Facebook",
+                  connectedAt: fbStatus.connectedAt || new Date().toISOString(),
+                }
+              : c,
+          ),
+        }));
+      }
+    } catch (err) {
+      // Si falla (401, no conectado, etc.), dejar como DISCONNECTED
+      console.log("[MARKETPLACE] Facebook no conectado o error:", err);
+    }
+  };
+
   const loadFacebookProducts = async () => {
     try {
       const [catalogRes, publishedProducts] = await Promise.all([
@@ -190,26 +220,26 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
       const allProducts = catalogRes?.items ?? [];
       console.log("[Marketplaces] allProducts count:", allProducts.length);
 
-const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
-  const pid = (product as any)._id ?? product.id ?? '';
-  const published = publishedProducts.find(p => p._id === pid);
-  const fbStatus  = published?.platforms?.facebook;
+      const statuses: ProductMarketplaceStatus[] = allProducts.map((product) => {
+        const pid = (product as any)._id ?? product.id ?? "";
+        const published = publishedProducts.find((p) => p._id === pid);
+        const fbStatus = published?.platforms?.facebook;
 
-  return mapToStatus(
-    {
-      _id:    pid,
-      name:   product.name,
-      sku:    product.sku    ?? '',
-      price:  product.price  ?? 0,
-      stock:  (product as any).stock ?? 0,
-      images: (product as any).images ?? [],
-    },
-    'FACEBOOK',
-    fbStatus?.syncStatus    ?? 'UNPUBLISHED',
-    fbStatus?.lastSyncedAt  ?? null,
-    fbStatus?.errorMessage  ?? null,
-  );
-});
+        return mapToStatus(
+          {
+            _id: pid,
+            name: product.name,
+            sku: product.sku ?? "",
+            price: product.price ?? 0,
+            stock: (product as any).stock ?? 0,
+            images: (product as any).images ?? [],
+          },
+          "FACEBOOK",
+          fbStatus?.syncStatus ?? "UNPUBLISHED",
+          fbStatus?.lastSyncedAt ?? null,
+          fbStatus?.errorMessage ?? null,
+        );
+      });
 
       setState((prev) => ({
         ...prev,
@@ -221,6 +251,7 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
       setState((prev) => ({ ...prev, loading: false }));
     }
   };
+
   const refreshFacebook = async () => {
     setState((prev) => ({ ...prev, loading: true }));
     await loadFacebookProducts();
@@ -228,7 +259,20 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
 
   // ── connectPlatform ──────────────────────────────────────────────────────
   const connectPlatform = async (platform: MarketplacePlatform) => {
-    // Solo Facebook tiene BE por ahora
+    if (platform === "FACEBOOK") {
+      // ═══ FLUJO REAL: redirigir a Meta OAuth ═══
+      const { authUrl } = await initFacebookOAuth();
+      if (!authUrl) {
+        throw new Error('No se recibió URL de autorización');
+      }
+      // Redirige al usuario a Meta para autorizar.
+      // Al regresar, MarketplaceDetail detecta ?connected=true
+      window.location.href = authUrl;
+      return; // el navegador sale de la app
+    }
+
+    // Mock para otras plataformas (Instagram, WhatsApp, TikTok)
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     setState((prev) => ({
       ...prev,
       connections: prev.connections.map((c) =>
@@ -236,28 +280,36 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
           ? {
               ...c,
               status: "CONNECTED",
-              accountName: "Las Plebes",
+              accountName: platform === "INSTAGRAM" ? "@lasplebes_oficial" : "Las Plebes",
               connectedAt: new Date().toISOString(),
             }
           : c,
       ),
     }));
-    auditLog("MARKETPLACE_CONNECTED", "marketplace", platform, {
-      platform,
-      userId: currentUser?.id,
+    auditLog({
+      action: "MARKETPLACE_CONNECTED",
+      entity: { type: "marketplace", id: platform, label: platform },
+      metadata: { platform, userId: currentUser?.id },
     });
   };
 
   // ── disconnectPlatform ───────────────────────────────────────────────────
   const disconnectPlatform = async (platform: MarketplacePlatform) => {
     if (platform === "FACEBOOK") {
-      // Despublicar todos en BE
+      // Despublicar todos en BE primero
       const published = state.productStatuses.filter(
         (s) => s.platform === "FACEBOOK" && s.syncStatus === "SYNCED",
       );
       await Promise.allSettled(
         published.map((s) => unpublishProductApi(s.productId)),
       );
+
+      // Desconectar en BE
+      try {
+        await disconnectFacebookApi();
+      } catch (err) {
+        console.error("[Marketplaces] Error desconectando Facebook en BE:", err);
+      }
     }
 
     setState((prev) => ({
@@ -279,9 +331,10 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
       ),
     }));
 
-    auditLog("MARKETPLACE_DISCONNECTED", "marketplace", platform, {
-      platform,
-      userId: currentUser?.id,
+    auditLog({
+      action: "MARKETPLACE_DISCONNECTED",
+      entity: { type: "marketplace", id: platform, label: platform },
+      metadata: { platform, userId: currentUser?.id },
     });
   };
 
@@ -292,11 +345,15 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
       if (platform === "FACEBOOK") {
         const result = await syncAllProductsApi();
         await loadFacebookProducts(); // refrescar desde BE
-        auditLog("MARKETPLACE_SYNC_ALL", "marketplace", platform, {
-          platform,
-          synced: result.synced,
-          errors: result.errors.length,
-          userId: currentUser?.id,
+        auditLog({
+          action: "MARKETPLACE_SYNC_ALL",
+          entity: { type: "marketplace", id: platform, label: platform },
+          metadata: {
+            platform,
+            synced: result.synced,
+            errors: result.errors.length,
+            userId: currentUser?.id,
+          },
         });
       } else {
         // Mock para otras plataformas
@@ -316,9 +373,10 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
               : s,
           ),
         }));
-        auditLog("MARKETPLACE_SYNC_ALL", "marketplace", platform, {
-          platform,
-          userId: currentUser?.id,
+        auditLog({
+          action: "MARKETPLACE_SYNC_ALL",
+          entity: { type: "marketplace", id: platform, label: platform },
+          metadata: { platform, userId: currentUser?.id },
         });
       }
     } finally {
@@ -346,9 +404,10 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
         ),
       }));
     }
-    auditLog("MARKETPLACE_UNPUBLISH_ALL", "marketplace", platform, {
-      platform,
-      userId: currentUser?.id,
+    auditLog({
+      action: "MARKETPLACE_UNPUBLISH_ALL",
+      entity: { type: "marketplace", id: platform, label: platform },
+      metadata: { platform, userId: currentUser?.id },
     });
   };
 
@@ -412,17 +471,16 @@ const statuses: ProductMarketplaceStatus[] = allProducts.map(product => {
         ),
       }));
     }
-    auditLog(
-      "MARKETPLACE_PRODUCT_TOGGLED",
-      "marketplace",
-      `${platform}-${productId}`,
-      {
+    auditLog({
+      action: "MARKETPLACE_PRODUCT_TOGGLED",
+      entity: { type: "marketplace", id: `${platform}-${productId}`, label: `${platform}-${productId}` },
+      metadata: {
         platform,
         productId,
         enabled,
         userId: currentUser?.id,
       },
-    );
+    });
   };
 
   // ── syncProduct ──────────────────────────────────────────────────────────

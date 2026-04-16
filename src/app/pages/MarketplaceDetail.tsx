@@ -1,3 +1,4 @@
+// src/app/pages/MarketplaceDetail.tsx
 import React, { useState, useEffect } from "react";
 import {
   ArrowLeft,
@@ -9,7 +10,7 @@ import {
   AlertTriangle,
   Search,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { PageContainer } from "../components/PageContainer";
 import { useMarketplaces } from "../store/MarketplacesContext";
 import { useToast } from "../store/ToastContext";
@@ -22,9 +23,11 @@ import {
   SYNC_STATUS_LABELS,
   SYNC_STATUS_COLORS,
 } from "../types/marketplace";
-
-// Agregar estos imports a los existentes
-import { useSearchParams } from "react-router-dom"; // ya tienes react-router
+import {
+  getFacebookStatus,
+  selectFacebookCatalog,
+  refreshFacebookCatalogs,
+} from "../../api/marketplaces";
 
 type TabKey = "all" | "published" | "unpublished" | "errors";
 
@@ -73,9 +76,6 @@ export function MarketplaceDetail() {
   const [selectedCatalog, setSelectedCatalog] = useState("");
   const [savingCatalog, setSavingCatalog] = useState(false);
 
-  const META_LAMBDA_URL =
-    "https://mrc94l3hc6.execute-api.us-east-1.amazonaws.com";
-
   useEffect(() => {
     const connected = searchParams.get("connected");
     const page = searchParams.get("page");
@@ -86,15 +86,10 @@ export function MarketplaceDetail() {
       setSearchParams({});
 
       // Obtener catálogos disponibles
-      const token = localStorage.getItem("accessToken");
-      fetch(`${META_LAMBDA_URL}/auth/facebook/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          console.log("[DEBUG] Facebook status:", JSON.stringify(data)); // ← agregar
-          const fb = data.data;
-          if (fb?.catalogs?.length > 0) {
+      getFacebookStatus()
+        .then((fb) => {
+          console.log("[DEBUG] Facebook status:", JSON.stringify(fb));
+          if (fb?.catalogs && fb.catalogs.length > 0) {
             setCatalogs(fb.catalogs);
             setSelectedCatalog(fb.catalogId || fb.catalogs[0].id);
           }
@@ -113,17 +108,12 @@ export function MarketplaceDetail() {
     }
   }, []);
 
-  // ← AGREGA ESTE SEGUNDO useEffect JUSTO AQUÍ ABAJO
+  // ── Cargar catálogos si Facebook ya está conectado ──
   useEffect(() => {
     if (platform === "FACEBOOK" && connection?.status === "CONNECTED") {
-      const token = localStorage.getItem("accessToken");
-      fetch(`${META_LAMBDA_URL}/auth/facebook/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          const fb = data.data;
-          if (fb?.catalogs?.length > 0) {
+      getFacebookStatus()
+        .then((fb) => {
+          if (fb?.catalogs && fb.catalogs.length > 0) {
             setCatalogs(fb.catalogs);
             setSelectedCatalog(fb.catalogId || fb.catalogs[0].id);
           }
@@ -135,15 +125,7 @@ export function MarketplaceDetail() {
   const handleSaveCatalog = async () => {
     setSavingCatalog(true);
     try {
-      const token = localStorage.getItem("accessToken");
-      await fetch(`${META_LAMBDA_URL}/auth/facebook/catalog`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ catalogId: selectedCatalog }),
-      });
+      await selectFacebookCatalog(selectedCatalog);
       showToast("success", "Catálogo seleccionado");
       setCatalogs([]);
     } catch {
@@ -173,6 +155,8 @@ export function MarketplaceDetail() {
     setConnectingOrDisconnecting(true);
     try {
       await connectPlatform(platform);
+      // Para Facebook, connectPlatform redirige a Meta (window.location.href)
+      // El finally solo se ejecuta si NO es Facebook (mock)
       showToast(
         "success",
         `${PLATFORM_SHORT_LABELS[platform]} conectado exitosamente`,
@@ -265,21 +249,13 @@ export function MarketplaceDetail() {
   const handleRefreshCatalogs = async () => {
     setRefreshingCatalogs(true);
     try {
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch(
-        `${META_LAMBDA_URL}/auth/facebook/refresh-catalogs`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      const data = await res.json();
-      if (data.status === "ok" && data.data.catalogs.length > 0) {
-        setCatalogs(data.data.catalogs);
-        setSelectedCatalog(data.data.catalogId);
+      const fb = await refreshFacebookCatalogs();
+      if (fb?.catalogs && fb.catalogs.length > 0) {
+        setCatalogs(fb.catalogs);
+        setSelectedCatalog(fb.catalogId || fb.catalogs[0].id);
         showToast(
           "success",
-          `${data.data.catalogs.length} catálogo(s) encontrado(s)`,
+          `${fb.catalogs.length} catálogo(s) encontrado(s)`,
         );
       } else {
         showToast(
@@ -363,6 +339,7 @@ export function MarketplaceDetail() {
             )}
           </div>
         </div>
+
         {/* Selector de catálogo — aparece solo si hay múltiples catálogos */}
         {catalogs.length > 1 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -392,6 +369,7 @@ export function MarketplaceDetail() {
             </div>
           </div>
         )}
+
         {/* Banner sin catálogo */}
         {connection.status === "CONNECTED" && catalogs.length === 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 flex items-start gap-3">

@@ -86,6 +86,11 @@ export type AuditAction =
   | 'REPORT_EXPORTED'
     | "USER_LOGIN"
   | "USER_LOGOUT"
+  | "MARKETPLACE_DISCONNECTED"
+  | "MARKETPLACE_SYNC_ALL"
+  | "MARKETPLACE_UNPUBLISH_ALL"
+  | "MARKETPLACE_PRODUCT_TOGGLED"
+  | "MARKETPLACE_CONNECTED"
   | "CATEGORY_CREATED"
   | "CATEGORY_UPDATED"
   | "CATEGORY_DELETED";             // Reporte exportado
@@ -103,7 +108,8 @@ export type AuditEntityType =
   | 'user'
   | 'promotion'
   | 'coupon'
-  | 'image';
+  | 'image'
+  | 'marketplace';
 
 export interface AuditEntity {
   type: AuditEntityType;
@@ -220,5 +226,10 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   REPORT_EXPORTED: 'Reporte exportado',
   USER_LOGIN: 'Login de usuario',
   USER_LOGOUT: 'Logout de usuario',
+  MARKETPLACE_DISCONNECTED: 'Marketplace desconectado',
+  MARKETPLACE_SYNC_ALL: 'Sincronizar todo en marketplace',
+  MARKETPLACE_UNPUBLISH_ALL: 'Despublicar todo en marketplace',
+  MARKETPLACE_PRODUCT_TOGGLED: 'Producto de marketplace activado/desactivado',
+  MARKETPLACE_CONNECTED: 'Marketplace conectado',
   CATEGORY_DELETED: 'Categoría eliminada',
 };

@@ -42,7 +42,7 @@ const menuItems = [
 export function SidebarNav() {
   const location = useLocation();
   const { hasPermission, hasAnyPermission } = useAuth();
-
+console.log('[Sidebar] menuItems count:', menuItems.length, 'permissions check:', menuItems.map(m => m.label + ':' + (m.permission ? hasPermission(m.permission) : 'no-perm')));
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 bg-white border-r border-gray-200 h-screen sticky top-0">
       {/* Logo */}
