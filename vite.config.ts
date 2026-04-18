@@ -11,6 +11,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    host:true,
     proxy: {
       "/api/identity": {
         target: "https://bjqd53qndxvche2oljwdzvf6z40zwojf.lambda-url.us-east-1.on.aws",
