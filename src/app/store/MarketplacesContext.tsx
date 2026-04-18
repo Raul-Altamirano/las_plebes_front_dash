@@ -1,71 +1,47 @@
 // src/app/store/MarketplacesContext.tsx
 import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  ReactNode,
+  createContext, useContext, useState, useEffect, useCallback, ReactNode,
 } from "react";
 import type {
-  MarketplacePlatform,
-  MarketplaceConnection,
-  ProductMarketplaceStatus,
-  PlatformStats,
+  MarketplacePlatform, MarketplaceConnection, ProductMarketplaceStatus, PlatformStats,
 } from "../types/marketplace";
 import { useAudit } from "./AuditContext";
 import { useAuth } from "./AuthContext";
 import {
-  getPublishedProducts,
-  syncProductApi,
-  syncAllProductsApi,
-  unpublishProductApi,
-  initFacebookOAuth,
-  getFacebookStatus,
-  setupFacebookAccount,
-  setPrimaryAccount,
-  toggleFacebookPage,
-  selectPageCatalog,
-  refreshPageCatalogs,
-  removeFacebookAccount,
+  getPublishedProducts, syncProductApi, syncAllProductsApi, unpublishProductApi,
+  initFacebookOAuth, getFacebookStatus, setupFacebookAccount, setPrimaryAccount,
+  toggleFacebookPage, selectPageCatalog, refreshPageCatalogs, removeFacebookAccount,
 } from "../../api/marketplaces";
 import type {
-  FacebookStatusResponse,
-  FacebookAccount,
-  SetupAccountConfig,
-  FacebookCatalog,
+  FacebookStatusResponse, FacebookAccount, SetupAccountConfig, FacebookCatalog,
 } from "../../api/marketplaces";
 import { listProducts } from "../../api/products";
 
-// ─── State ──────────────────────────────────────────────────────
 interface MarketplacesState {
   connections: MarketplaceConnection[];
   productStatuses: ProductMarketplaceStatus[];
   platformStats: PlatformStats[];
   loading: boolean;
   syncing: boolean;
-  // Facebook multi-account
   facebookStatus: FacebookStatusResponse | null;
-  wizardAccountId: string | null; // accountId for post-OAuth wizard
+  wizardAccountId: string | null;
   wizardIsFirst: boolean;
   showWizard: boolean;
 }
 
 interface MarketplacesContextValue extends MarketplacesState {
-  // Platform-level (legacy compat)
   connectPlatform: (platform: MarketplacePlatform) => Promise<void>;
   disconnectPlatform: (platform: MarketplacePlatform) => Promise<void>;
-  syncAllProducts: (platform: MarketplacePlatform) => Promise<void>;
-  unpublishAllProducts: (platform: MarketplacePlatform) => Promise<void>;
-  toggleProductPlatform: (productId: string, platform: MarketplacePlatform, enabled: boolean) => Promise<void>;
-  syncProduct: (productId: string, platform: MarketplacePlatform) => Promise<void>;
+  syncAllProducts: (platform: MarketplacePlatform, pageId?: string) => Promise<void>;
+  unpublishAllProducts: (platform: MarketplacePlatform, pageId?: string) => Promise<void>;
+  toggleProductPlatform: (productId: string, platform: MarketplacePlatform, enabled: boolean, pageId?: string) => Promise<void>;
+  syncProduct: (productId: string, platform: MarketplacePlatform, pageId?: string) => Promise<void>;
   getConnectionStatus: (platform: MarketplacePlatform) => MarketplaceConnection | undefined;
   getPlatformStats: (platform: MarketplacePlatform) => PlatformStats | undefined;
   getProductStatuses: (platform: MarketplacePlatform) => ProductMarketplaceStatus[];
   getProductStatus: (productId: string, platform: MarketplacePlatform) => ProductMarketplaceStatus | undefined;
   isPlatformConnected: (platform: MarketplacePlatform) => boolean;
   refreshFacebook: () => Promise<void>;
-  // Facebook multi-account
   reloadFacebookStatus: () => Promise<void>;
   setupAccount: (accountId: string, config: SetupAccountConfig) => Promise<void>;
   setAsPrimary: (accountId: string) => Promise<void>;
@@ -87,7 +63,6 @@ const INITIAL_CONNECTIONS: MarketplaceConnection[] = [
   { platform: "TIKTOK", status: "DISCONNECTED" },
 ];
 
-// ─── Helpers ────────────────────────────────────────────────────
 const calculateStats = (statuses: ProductMarketplaceStatus[]): PlatformStats[] => {
   const platforms: MarketplacePlatform[] = ["FACEBOOK", "INSTAGRAM", "WHATSAPP", "TIKTOK"];
   return platforms.map((platform) => {
@@ -123,7 +98,6 @@ const mapToStatus = (
   errorMessage: errorMessage ?? undefined,
 });
 
-// ─── Provider ───────────────────────────────────────────────────
 export function MarketplacesProvider({ children }: { children: ReactNode }) {
   const { auditLog } = useAudit();
   const { currentUser } = useAuth();
@@ -140,36 +114,24 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
     showWizard: false,
   });
 
-  // ── Load on mount ──
   useEffect(() => { reloadFacebookStatus(); }, []);
   useEffect(() => { loadFacebookProducts(); }, []);
-
   useEffect(() => {
     setState((prev) => ({ ...prev, platformStats: calculateStats(prev.productStatuses) }));
   }, [state.productStatuses]);
 
-  // ── Reload Facebook status from BE ──
   const reloadFacebookStatus = useCallback(async () => {
     try {
       const fb = await getFacebookStatus();
       console.log("[MARKETPLACE] reloadFacebookStatus:", fb);
-
       setState((prev) => {
-        const hasActivePages = fb.accounts?.some((a: FacebookAccount) =>
-          a.pages.some((p) => p.isActive)
-        );
-
+        const hasActivePages = fb.accounts?.some((a: FacebookAccount) => a.pages.some((p) => p.isActive));
         return {
           ...prev,
           facebookStatus: fb,
           connections: prev.connections.map((c) =>
             c.platform === "FACEBOOK"
-              ? {
-                  ...c,
-                  status: (fb.connected && hasActivePages ? "CONNECTED" : "DISCONNECTED") as any,
-                  accountName: fb.accounts?.[0]?.userName || "Facebook",
-                  connectedAt: fb.accounts?.[0]?.connectedAt || undefined,
-                }
+              ? { ...c, status: (fb.connected && hasActivePages ? "CONNECTED" : "DISCONNECTED") as any, accountName: fb.accounts?.[0]?.userName || "Facebook", connectedAt: fb.accounts?.[0]?.connectedAt || undefined }
               : c
           ),
         };
@@ -185,7 +147,6 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
         listProducts({ limit: 200 }),
         getPublishedProducts().catch(() => []),
       ]);
-
       const allProducts = catalogRes?.items ?? [];
       const statuses: ProductMarketplaceStatus[] = allProducts.map((product) => {
         const pid = (product as any)._id ?? product.id ?? "";
@@ -199,7 +160,6 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
           fbStatus?.errorMessage ?? null,
         );
       });
-
       setState((prev) => ({ ...prev, productStatuses: statuses, loading: false }));
     } catch (err) {
       console.error("[MARKETPLACE] Error loading Facebook products:", err);
@@ -212,7 +172,6 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
     await loadFacebookProducts();
   };
 
-  // ── Connect platform ──
   const connectPlatform = async (platform: MarketplacePlatform) => {
     if (platform === "FACEBOOK") {
       const { authUrl } = await initFacebookOAuth();
@@ -220,32 +179,24 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
       window.location.href = authUrl;
       return;
     }
-    // Mock for other platforms
     await new Promise((r) => setTimeout(r, 2000));
     setState((prev) => ({
       ...prev,
       connections: prev.connections.map((c) =>
-        c.platform === platform
-          ? { ...c, status: "CONNECTED", accountName: "Mock", connectedAt: new Date().toISOString() }
-          : c
+        c.platform === platform ? { ...c, status: "CONNECTED", accountName: "Mock", connectedAt: new Date().toISOString() } : c
       ),
     }));
     auditLog({ action: "MARKETPLACE_CONNECTED", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, userId: currentUser?.id } });
   };
 
-  // ── Disconnect platform ──
   const disconnectPlatform = async (platform: MarketplacePlatform) => {
     if (platform === "FACEBOOK") {
-      const published = state.productStatuses.filter((s) => s.platform === "FACEBOOK" && s.syncStatus === "SYNCED");
-      await Promise.allSettled(published.map((s) => unpublishProductApi(s.productId)));
-      // Remove all accounts
       const accounts = state.facebookStatus?.accounts || [];
       for (const acc of accounts) {
         try { await removeFacebookAccount(acc.accountId); } catch (e) { console.error(e); }
       }
       await reloadFacebookStatus();
     }
-
     setState((prev) => ({
       ...prev,
       connections: prev.connections.map((c) =>
@@ -255,18 +206,17 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
         s.platform === platform ? { ...s, isPublished: false, syncStatus: "UNPUBLISHED" } : s
       ),
     }));
-
     auditLog({ action: "MARKETPLACE_DISCONNECTED", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, userId: currentUser?.id } });
   };
 
-  // ── Sync all ──
-  const syncAllProducts = async (platform: MarketplacePlatform) => {
+  const syncAllProducts = async (platform: MarketplacePlatform, pageId?: string) => {
     setState((prev) => ({ ...prev, syncing: true }));
     try {
       if (platform === "FACEBOOK") {
-        const result = await syncAllProductsApi();
+        console.log(`[MARKETPLACE] syncAll pageId=${pageId}`);
+        const result = await syncAllProductsApi(pageId);
         await loadFacebookProducts();
-        auditLog({ action: "MARKETPLACE_SYNC_ALL", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, synced: result.synced, errors: result.errors.length, userId: currentUser?.id } });
+        auditLog({ action: "MARKETPLACE_SYNC_ALL", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, pageId, synced: result.synced, errors: result.errors.length, userId: currentUser?.id } });
       } else {
         await new Promise((r) => setTimeout(r, 2000));
         const now = new Date().toISOString();
@@ -274,8 +224,7 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
           ...prev,
           productStatuses: prev.productStatuses.map((s) =>
             s.platform === platform && (s.syncStatus === "PENDING" || s.syncStatus === "ERROR")
-              ? { ...s, syncStatus: "SYNCED", lastSyncedAt: now, errorMessage: undefined }
-              : s
+              ? { ...s, syncStatus: "SYNCED", lastSyncedAt: now, errorMessage: undefined } : s
           ),
         }));
         auditLog({ action: "MARKETPLACE_SYNC_ALL", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, userId: currentUser?.id } });
@@ -285,11 +234,10 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // ── Unpublish all ──
-  const unpublishAllProducts = async (platform: MarketplacePlatform) => {
+  const unpublishAllProducts = async (platform: MarketplacePlatform, pageId?: string) => {
     if (platform === "FACEBOOK") {
       const published = state.productStatuses.filter((s) => s.platform === "FACEBOOK" && s.syncStatus === "SYNCED");
-      await Promise.allSettled(published.map((s) => unpublishProductApi(s.productId)));
+      await Promise.allSettled(published.map((s) => unpublishProductApi(s.productId, pageId)));
       await loadFacebookProducts();
     } else {
       setState((prev) => ({
@@ -299,11 +247,10 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
         ),
       }));
     }
-    auditLog({ action: "MARKETPLACE_UNPUBLISH_ALL", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, userId: currentUser?.id } });
+    auditLog({ action: "MARKETPLACE_UNPUBLISH_ALL", entity: { type: "marketplace", id: platform, label: platform }, metadata: { platform, pageId, userId: currentUser?.id } });
   };
 
-  // ── Toggle product ──
-  const toggleProductPlatform = async (productId: string, platform: MarketplacePlatform, enabled: boolean) => {
+  const toggleProductPlatform = async (productId: string, platform: MarketplacePlatform, enabled: boolean, pageId?: string) => {
     if (platform === "FACEBOOK") {
       if (enabled) {
         setState((prev) => ({
@@ -313,20 +260,19 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
           ),
         }));
         try {
-          await syncProductApi(productId);
+          await syncProductApi(productId, pageId);
           await loadFacebookProducts();
         } catch (err: any) {
           setState((prev) => ({
             ...prev,
             productStatuses: prev.productStatuses.map((s) =>
               s.productId === productId && s.platform === "FACEBOOK"
-                ? { ...s, syncStatus: "ERROR", isPublished: false, errorMessage: err?.message || "Error" }
-                : s
+                ? { ...s, syncStatus: "ERROR", isPublished: false, errorMessage: err?.message || "Error" } : s
             ),
           }));
         }
       } else {
-        await unpublishProductApi(productId);
+        await unpublishProductApi(productId, pageId);
         setState((prev) => ({
           ...prev,
           productStatuses: prev.productStatuses.map((s) =>
@@ -339,18 +285,16 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
         ...prev,
         productStatuses: prev.productStatuses.map((s) =>
           s.productId === productId && s.platform === platform
-            ? { ...s, isPublished: enabled, syncStatus: enabled ? "PENDING" : "UNPUBLISHED" }
-            : s
+            ? { ...s, isPublished: enabled, syncStatus: enabled ? "PENDING" : "UNPUBLISHED" } : s
         ),
       }));
     }
-    auditLog({ action: "MARKETPLACE_PRODUCT_TOGGLED", entity: { type: "marketplace", id: `${platform}-${productId}`, label: `${platform}-${productId}` }, metadata: { platform, productId, enabled, userId: currentUser?.id } });
+    auditLog({ action: "MARKETPLACE_PRODUCT_TOGGLED", entity: { type: "marketplace", id: `${platform}-${productId}`, label: `${platform}-${productId}` }, metadata: { platform, productId, enabled, pageId, userId: currentUser?.id } });
   };
 
-  // ── Sync single product ──
-  const syncProduct = async (productId: string, platform: MarketplacePlatform) => {
+  const syncProduct = async (productId: string, platform: MarketplacePlatform, pageId?: string) => {
     if (platform === "FACEBOOK") {
-      await syncProductApi(productId);
+      await syncProductApi(productId, pageId);
       await loadFacebookProducts();
     } else {
       await new Promise((r) => setTimeout(r, 1000));
@@ -358,15 +302,13 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
         ...prev,
         productStatuses: prev.productStatuses.map((s) =>
           s.productId === productId && s.platform === platform
-            ? { ...s, syncStatus: "SYNCED", lastSyncedAt: new Date().toISOString(), errorMessage: undefined }
-            : s
+            ? { ...s, syncStatus: "SYNCED", lastSyncedAt: new Date().toISOString(), errorMessage: undefined } : s
         ),
       }));
     }
   };
 
-  // ═══ Facebook multi-account operations ═══
-
+  // Facebook multi-account
   const setupAccount = async (accountId: string, config: SetupAccountConfig) => {
     await setupFacebookAccount(accountId, config);
     await reloadFacebookStatus();
@@ -409,7 +351,6 @@ export function MarketplacesProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, wizardAccountId: null, wizardIsFirst: false, showWizard: false }));
   };
 
-  // ── Getters ──
   const getConnectionStatus = (p: MarketplacePlatform) => state.connections.find((c) => c.platform === p);
   const getPlatformStats = (p: MarketplacePlatform) => state.platformStats.find((s) => s.platform === p);
   const getProductStatuses = (p: MarketplacePlatform) => state.productStatuses.filter((s) => s.platform === p);

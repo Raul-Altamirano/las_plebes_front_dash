@@ -2,17 +2,17 @@
 import React, { useState, useEffect } from "react";
 import {
   ArrowLeft, Loader2, RefreshCw, XCircle, CheckCircle2,
-  AlertTriangle, Search,
+  AlertTriangle, Search, Upload,
 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useMarketplaces } from "../store/MarketplacesContext";
 import { useToast } from "../store/ToastContext";
 import { FacebookAccountsAccordion } from "../components/FacebookAccountsAccordion";
 import { FacebookSetupWizard } from "../components/FacebookSetupWizard";
-import type { MarketplacePlatform, SyncStatus } from "../types/marketplace";
+import { PublishTargetModal } from "../components/PublishTargetModal";
+import type { MarketplacePlatform } from "../types/marketplace";
 import {
   PLATFORM_LABELS, PLATFORM_SHORT_LABELS,
-  CONNECTION_STATUS_LABELS, CONNECTION_STATUS_COLORS,
   SYNC_STATUS_LABELS, SYNC_STATUS_COLORS,
 } from "../types/marketplace";
 
@@ -47,7 +47,17 @@ export function MarketplaceDetail() {
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Loading states
+  const [connecting, setConnecting] = useState(false);
   const [syncingProductId, setSyncingProductId] = useState<string | null>(null);
+
+  // Publish modal
+  const [publishModal, setPublishModal] = useState<{
+    mode: "sync-all" | "sync-one" | "unpublish-all";
+    productId?: string;
+    productName?: string;
+  } | null>(null);
 
   // ── OAuth callback detection ──
   useEffect(() => {
@@ -59,7 +69,6 @@ export function MarketplaceDetail() {
 
     if (connected === "true" && accountId) {
       setSearchParams({});
-      // Reload status then open wizard
       reloadFacebookStatus().then(() => {
         openWizard(accountId, isFirst === "1");
       });
@@ -89,51 +98,63 @@ export function MarketplaceDetail() {
   }
 
   const handleConnect = async () => {
+    setConnecting(true);
     try {
       await connectPlatform(platform);
+      // For Facebook, this redirects — connecting stays true until page unloads
     } catch (err: any) {
       showToast(err?.message || `Error al conectar ${PLATFORM_SHORT_LABELS[platform]}`, "error");
+      setConnecting(false);
     }
   };
 
-  const handleSyncAll = async () => {
-    try {
-      await syncAllProducts(platform);
-      showToast("Productos sincronizados exitosamente", "success");
-    } catch {
-      showToast("Error al sincronizar productos", "error");
-    }
+  // ── Publish modal handlers ──
+  const handleSyncAllConfirm = async (pageId: string) => {
+    await syncAllProducts(platform, pageId);
+    showToast("Productos sincronizados exitosamente", "success");
   };
 
-  const handleUnpublishAll = async () => {
-    if (!confirm(`¿Estás seguro? Esto quitará todos tus productos de ${PLATFORM_SHORT_LABELS[platform]}.`)) return;
-    try {
-      await unpublishAllProducts(platform);
-      showToast("Todos los productos han sido despublicados", "success");
-    } catch {
-      showToast("Error al despublicar productos", "error");
-    }
+  const handleSyncOneConfirm = async (pageId: string) => {
+    if (!publishModal?.productId) return;
+    await syncProduct(publishModal.productId, platform, pageId);
+    showToast("Producto sincronizado", "success");
+  };
+
+  const handleUnpublishAllConfirm = async (pageId: string) => {
+    await unpublishAllProducts(platform, pageId);
+    showToast("Todos los productos han sido despublicados", "success");
   };
 
   const handleToggleProduct = async (productId: string, enabled: boolean) => {
-    try {
-      await toggleProductPlatform(productId, platform, enabled);
-      showToast(enabled ? "Producto sincronizado" : "Producto despublicado", "success");
-    } catch {
-      showToast("Error al actualizar el producto", "error");
+    if (enabled) {
+      // Open modal to select where to publish
+      const product = productStatuses.find((p) => p.productId === productId);
+      setPublishModal({
+        mode: "sync-one",
+        productId,
+        productName: product?.productName,
+      });
+    } else {
+      // Unpublish doesn't need page selection — it removes from wherever it was
+      setSyncingProductId(productId);
+      try {
+        await toggleProductPlatform(productId, platform, false);
+        showToast("Producto despublicado", "success");
+      } catch {
+        showToast("Error al despublicar", "error");
+      } finally {
+        setSyncingProductId(null);
+      }
     }
   };
 
   const handleSyncProduct = async (productId: string) => {
-    setSyncingProductId(productId);
-    try {
-      await syncProduct(productId, platform);
-      showToast("Producto sincronizado", "success");
-    } catch {
-      showToast("Error al sincronizar producto", "error");
-    } finally {
-      setSyncingProductId(null);
-    }
+    const product = productStatuses.find((p) => p.productId === productId);
+    setPublishModal({
+      mode: "sync-one",
+      productId,
+      productName: product?.productName,
+    });
   };
 
   // ── Filter products ──
@@ -165,16 +186,19 @@ export function MarketplaceDetail() {
             <h2 className="text-lg font-semibold text-gray-900">{PLATFORM_LABELS[platform]}</h2>
           </div>
           {!hasAccounts && isFacebook && (
-            <button onClick={handleConnect} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              Conectar con Facebook
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {connecting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {connecting ? "Conectando..." : "Conectar con Facebook"}
             </button>
           )}
         </div>
 
         {/* Facebook: Accounts accordion */}
-        {isFacebook && (
-          <FacebookAccountsAccordion />
-        )}
+        {isFacebook && <FacebookAccountsAccordion />}
 
         {/* Wizard modal */}
         {showWizard && wizardAccountId && (
@@ -185,9 +209,27 @@ export function MarketplaceDetail() {
           />
         )}
 
-        {/* Stats */}
+        {/* Publish target modal */}
+        {publishModal && (
+          <PublishTargetModal
+            mode={publishModal.mode}
+            productId={publishModal.productId}
+            productName={publishModal.productName}
+            onConfirm={
+              publishModal.mode === "sync-all"
+                ? handleSyncAllConfirm
+                : publishModal.mode === "unpublish-all"
+                ? handleUnpublishAllConfirm
+                : handleSyncOneConfirm
+            }
+            onClose={() => setPublishModal(null)}
+          />
+        )}
+
+        {/* Stats + Products */}
         {hasAccounts && (
           <>
+            {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <p className="text-sm text-gray-600 mb-1">Publicados</p>
@@ -214,17 +256,28 @@ export function MarketplaceDetail() {
             {/* Bulk actions */}
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-3">
-                <button onClick={handleSyncAll} disabled={syncing} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2">
-                  {syncing ? (<><Loader2 className="w-4 h-4 animate-spin" />Sincronizando...</>) : (<><RefreshCw className="w-4 h-4" />Sincronizar todos</>)}
+                <button
+                  onClick={() => setPublishModal({ mode: "sync-all" })}
+                  disabled={syncing}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                >
+                  {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  {syncing ? "Sincronizando..." : "Sincronizar todos"}
                 </button>
-                <button onClick={handleUnpublishAll} className="px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 text-sm font-medium flex items-center gap-2">
-                  <XCircle className="w-4 h-4" />Despublicar todos
+                <button
+                  onClick={() => setPublishModal({ mode: "unpublish-all" })}
+                  disabled={syncing}
+                  className="px-4 py-2 bg-white border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Despublicar todos
                 </button>
               </div>
             </div>
 
             {/* Products table */}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              {/* Tabs */}
               <div className="border-b border-gray-200">
                 <nav className="flex gap-8 px-6">
                   {TABS.map((tab) => {
@@ -242,6 +295,7 @@ export function MarketplaceDetail() {
                 </nav>
               </div>
 
+              {/* Search */}
               <div className="p-4 border-b border-gray-200">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -249,6 +303,7 @@ export function MarketplaceDetail() {
                 </div>
               </div>
 
+              {/* Table */}
               {filteredProducts.length === 0 ? (
                 <div className="p-12 text-center">
                   {activeTab === "errors" ? (
@@ -274,11 +329,16 @@ export function MarketplaceDetail() {
                     <tbody className="divide-y divide-gray-200">
                       {filteredProducts.map((product) => {
                         const isSyncing = syncingProductId === product.productId;
+
                         return (
                           <tr key={`${product.productId}-${product.platform}`} className="hover:bg-gray-50">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-500">IMG</div>
+                                {product.productImage ? (
+                                  <img src={product.productImage} alt="" className="w-10 h-10 rounded object-cover" />
+                                ) : (
+                                  <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-500">IMG</div>
+                                )}
                                 <span className="text-sm font-medium text-gray-900">{product.productName}</span>
                               </div>
                             </td>
@@ -287,7 +347,9 @@ export function MarketplaceDetail() {
                             <td className="px-4 py-3 text-right"><span className="text-sm text-gray-600">{product.productStock || 0}</span></td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
-                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${SYNC_STATUS_COLORS[product.syncStatus]}`}>{SYNC_STATUS_LABELS[product.syncStatus]}</span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${SYNC_STATUS_COLORS[product.syncStatus]}`}>
+                                  {SYNC_STATUS_LABELS[product.syncStatus]}
+                                </span>
                                 {product.syncStatus === "ERROR" && product.errorMessage && (
                                   <div className="relative group">
                                     <AlertTriangle className="w-4 h-4 text-red-500 cursor-help" />
@@ -299,20 +361,57 @@ export function MarketplaceDetail() {
                             <td className="px-4 py-3"><span className="text-sm text-gray-600">{formatDate(product.lastSyncedAt)}</span></td>
                             <td className="px-4 py-3 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                  <input type="checkbox" checked={product.isPublished} onChange={(e) => handleToggleProduct(product.productId, e.target.checked)} className="sr-only peer" />
-                                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
-                                </label>
-                                {product.syncStatus === "SYNCED" && product.isPublished && (
-                                  <button onClick={() => handleSyncProduct(product.productId)} disabled={isSyncing} className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50">
-                                    {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sincronizar"}
+                                {/* Publish button — opens modal */}
+                                {(!product.isPublished || product.syncStatus === "UNPUBLISHED") && (
+                                  <button
+                                    onClick={() => handleToggleProduct(product.productId, true)}
+                                    disabled={isSyncing}
+                                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                  >
+                                    {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                                    Publicar
                                   </button>
                                 )}
-                                {product.syncStatus === "PENDING" && <Loader2 className="w-4 h-4 text-yellow-600 animate-spin" />}
-                                {product.syncStatus === "ERROR" && product.isPublished && (
-                                  <button onClick={() => handleSyncProduct(product.productId)} disabled={isSyncing} className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:opacity-50">
-                                    {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reintentar"}
+
+                                {/* Re-sync button */}
+                                {product.syncStatus === "SYNCED" && product.isPublished && (
+                                  <button
+                                    onClick={() => handleSyncProduct(product.productId)}
+                                    disabled={isSyncing}
+                                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                  >
+                                    {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                    Re-sync
                                   </button>
+                                )}
+
+                                {/* Retry button */}
+                                {product.syncStatus === "ERROR" && (
+                                  <button
+                                    onClick={() => handleSyncProduct(product.productId)}
+                                    disabled={isSyncing}
+                                    className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                  >
+                                    {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                    Reintentar
+                                  </button>
+                                )}
+
+                                {/* Unpublish button */}
+                                {product.isPublished && product.syncStatus === "SYNCED" && (
+                                  <button
+                                    onClick={() => handleToggleProduct(product.productId, false)}
+                                    disabled={isSyncing}
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                  >
+                                    {isSyncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                                    Quitar
+                                  </button>
+                                )}
+
+                                {/* Pending spinner */}
+                                {product.syncStatus === "PENDING" && (
+                                  <Loader2 className="w-4 h-4 text-yellow-600 animate-spin" />
                                 )}
                               </div>
                             </td>
@@ -327,7 +426,7 @@ export function MarketplaceDetail() {
           </>
         )}
 
-        {/* Empty state — no accounts connected */}
+        {/* Empty state */}
         {isFacebook && !hasAccounts && (
           <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
             <div className="text-6xl mb-4">📘</div>
@@ -335,8 +434,13 @@ export function MarketplaceDetail() {
             <p className="text-gray-500 max-w-md mx-auto mb-6">
               Vincula tu cuenta para administrar tus páginas, catálogos y sincronizar productos.
             </p>
-            <button onClick={handleConnect} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-              Conectar con Facebook
+            <button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 mx-auto"
+            >
+              {connecting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {connecting ? "Conectando..." : "Conectar con Facebook"}
             </button>
           </div>
         )}

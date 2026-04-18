@@ -116,11 +116,7 @@ export async function setupFacebookAccount(
 ): Promise<any> {
   const res = await authFetch<any>(
     `/auth/facebook/accounts/${accountId}/setup`,
-    {
-      method: 'POST',
-      body: JSON.stringify(config),
-      label: '[MARKETPLACE] setupAccount',
-    }
+    { method: 'POST', body: JSON.stringify(config), label: '[MARKETPLACE] setupAccount' }
   );
   return res.data ?? res;
 }
@@ -133,9 +129,7 @@ export async function setPrimaryAccount(accountId: string): Promise<void> {
 }
 
 export async function toggleFacebookPage(
-  accountId: string,
-  pageId: string,
-  active: boolean
+  accountId: string, pageId: string, active: boolean
 ): Promise<void> {
   await authFetch(`/auth/facebook/accounts/${accountId}/pages/${pageId}/toggle`, {
     method: 'PATCH',
@@ -145,9 +139,7 @@ export async function toggleFacebookPage(
 }
 
 export async function selectPageCatalog(
-  accountId: string,
-  pageId: string,
-  catalogId: string
+  accountId: string, pageId: string, catalogId: string
 ): Promise<void> {
   await authFetch(`/auth/facebook/accounts/${accountId}/pages/${pageId}/catalog`, {
     method: 'PATCH',
@@ -157,8 +149,7 @@ export async function selectPageCatalog(
 }
 
 export async function refreshPageCatalogs(
-  accountId: string,
-  pageId: string
+  accountId: string, pageId: string
 ): Promise<{ catalogs: FacebookCatalog[]; activeCatalogId: string | null }> {
   const res = await authFetch<any>(
     `/auth/facebook/accounts/${accountId}/pages/${pageId}/refresh-catalogs`,
@@ -175,7 +166,7 @@ export async function removeFacebookAccount(accountId: string): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Product sync endpoints
+// Product sync endpoints — now accept pageId
 // ═══════════════════════════════════════════════════════════════
 
 export async function getPublishedProducts(): Promise<PublishedProduct[]> {
@@ -191,25 +182,34 @@ export async function getPublishedProducts(): Promise<PublishedProduct[]> {
   }
 }
 
-export async function syncProductApi(productId: string): Promise<PublishedProduct> {
+export async function syncProductApi(productId: string, pageId?: string): Promise<PublishedProduct> {
   const res = await apiFetch<{ status: string; data: PublishedProduct }>(
     `/products/${productId}/sync`,
-    { method: 'POST', label: '[MARKETPLACE] syncProduct' }
+    {
+      method: 'POST',
+      body: pageId ? JSON.stringify({ pageId }) : undefined,
+      label: '[MARKETPLACE] syncProduct',
+    }
   );
   return res.data;
 }
 
-export async function syncAllProductsApi(): Promise<SyncAllResult> {
+export async function syncAllProductsApi(pageId?: string): Promise<SyncAllResult> {
   const res = await apiFetch<{ status: string; data: SyncAllResult }>(
     '/products/sync-all',
-    { method: 'POST', label: '[MARKETPLACE] syncAll' }
+    {
+      method: 'POST',
+      body: pageId ? JSON.stringify({ pageId }) : undefined,
+      label: '[MARKETPLACE] syncAll',
+    }
   );
   return res.data;
 }
 
-export async function unpublishProductApi(productId: string): Promise<void> {
+export async function unpublishProductApi(productId: string, pageId?: string): Promise<void> {
   await apiFetch(`/products/${productId}`, {
     method: 'DELETE',
+    body: pageId ? JSON.stringify({ pageId }) : undefined,
     label: '[MARKETPLACE] unpublish',
   });
 }
