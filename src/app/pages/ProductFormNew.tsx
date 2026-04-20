@@ -19,7 +19,7 @@ import { useAudit } from "../store/AuditContext";
 import { ImagePickerV2 } from "../components/ImagePickerV2";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RequirePermission } from "../components/RequirePermission";
-import { SKU_CONFIG, buildSkuRegex, buildSkuPlaceholder } from '../config/skuConfig';
+import { SKU_CONFIG, buildSkuRegex, buildSkuPlaceholder, buildVariantSku } from '../config/skuConfig';
 import { VariantEditor } from "../components/VariantEditor";
 import { VariantImagesSection } from "../components/VariantImagesSection"; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
 import {
@@ -346,6 +346,15 @@ export function ProductForm() {
     }
 
     try {
+      // ─── Herencia de imágenes: variantes sin fotos propias heredan las del padre ─
+      const parentImages = uploadedImages ?? formData.images ?? [];
+      const finalVariants = updatedVariants.map((v) => {
+        if ((!v.images || v.images.length === 0) && parentImages.length > 0) {
+          return { ...v, images: [...parentImages] };
+        }
+        return v;
+      });
+
       const basePayload = {
         name: formData.name!,
         sku: formData.sku!,
@@ -354,11 +363,11 @@ export function ProductForm() {
         status: targetStatus,
         categoryId: formData.categoryId!,
         description: formData.description,
-        images: uploadedImages ?? formData.images ?? [],
+        images: parentImages,
         updatedAt: new Date().toISOString(),
         isArchived: originalProduct?.isArchived || false,
         hasVariants: formData.hasVariants || false,
-        variants: updatedVariants,
+        variants: finalVariants,
         cost: formData.cost,
         colorHex: formData.colorHex || undefined,
         trackCost: formData.trackCost !== undefined ? formData.trackCost : true,
@@ -692,23 +701,9 @@ export function ProductForm() {
       type="text"
       value={formData.sku || ""}
       onChange={(e) => {
-        let val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-        const { numberDigits } = SKU_CONFIG;
-        const maxPrefix = 6;
-        const raw = val.replace(/-/g, '');
-        let formatted = '';
-        if (raw.length <= maxPrefix) {
-          formatted = raw;
-        } else if (raw.length <= maxPrefix + numberDigits) {
-          formatted = `${raw.slice(0, maxPrefix)}-${raw.slice(maxPrefix)}`;
-        } else if (raw.length <= maxPrefix + numberDigits + 4) {
-          formatted = `${raw.slice(0, maxPrefix)}-${raw.slice(maxPrefix, maxPrefix + numberDigits)}-${raw.slice(maxPrefix + numberDigits)}`;
-        } else {
-          const s3 = maxPrefix + numberDigits;
-          const s4 = s3 + 4;
-          formatted = `${raw.slice(0, maxPrefix)}-${raw.slice(maxPrefix, maxPrefix + numberDigits)}-${raw.slice(s3, s4)}-${raw.slice(s4, s4 + 4)}`;
-        }
-        handleChange("sku", formatted);
+        // Solo uppercase + permitir letras, números y guiones
+        const val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        handleChange("sku", val);
       }}
       className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
         errors.sku ? "border-red-300 focus:ring-red-500" : "border-gray-300"
@@ -738,6 +733,77 @@ export function ProductForm() {
   </p>
 )}
 </div>
+            {/* Talla inicial — auto-genera primera variante */}
+            {!isEdit && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Talla inicial
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: 25, 25.5, 28"
+                  value={(formData.variants ?? [])[0]?.size || ""}
+                  onChange={(e) => {
+                    const size = e.target.value.replace(/[^0-9.]/g, '');
+                    const currentVariants = [...(formData.variants || [])];
+                    const parentSku = formData.sku || '';
+
+                    if (!size) {
+                      // Si borra la talla, quitar la variante auto-generada solo si está vacía
+                      if (
+                        currentVariants.length === 1 &&
+                        !currentVariants[0].color &&
+                        (currentVariants[0].stock || 0) === 0
+                      ) {
+                        handleChange("variants", []);
+                        handleChange("hasVariants", false);
+                      } else if (currentVariants.length > 0) {
+                        currentVariants[0] = {
+                          ...currentVariants[0],
+                          size: undefined,
+                          sku: buildVariantSku(parentSku, undefined, 1),
+                        };
+                        handleChange("variants", currentVariants);
+                      }
+                      return;
+                    }
+
+                    if (currentVariants.length === 0) {
+                      // Auto-crear primera variante
+                      const newVariant: ProductVariant = {
+                        id: Math.random().toString(36).substring(7),
+                        sku: buildVariantSku(parentSku, size, 1),
+                        size: size,
+                        color: undefined,
+                        colorHex: formData.colorHex || "#000000",
+                        price: formData.price || 0,
+                        cost: formData.cost || 0,
+                        stock: formData.stock || 0,
+                        updatedAt: new Date().toISOString(),
+                      };
+                      handleChange("variants", [newVariant]);
+                      handleChange("hasVariants", true);
+                    } else {
+                      // Actualizar talla de la primera variante
+                      currentVariants[0] = {
+                        ...currentVariants[0],
+                        size: size,
+                        sku: buildVariantSku(parentSku, size, 1),
+                      };
+                      handleChange("variants", currentVariants);
+                      if (!formData.hasVariants) {
+                        handleChange("hasVariants", true);
+                      }
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Al agregar talla se crea automáticamente la primera variante vendible en la tienda
+                </p>
+              </div>
+            )}
+
             <div>
               <ColorPicker
                 label="Color del producto"

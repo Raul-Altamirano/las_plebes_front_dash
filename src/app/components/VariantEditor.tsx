@@ -8,6 +8,11 @@ import { Label } from "./ui/label";
 import { ProductVariant } from "../types/product";
 import { useProductsStore } from "../store/ProductsContext";
 import { ColorPicker } from "./ColorPicker";
+import {
+  getSkuBase,
+  buildVariantSku,
+  replaceSkuSize,
+} from "../config/skuConfig";
 
 interface VariantEditorProps {
   variants: ProductVariant[];
@@ -70,11 +75,30 @@ export function VariantEditor({
     }
   };
 
+  // ─── Calcular siguiente número de versión disponible ──────────────────────
+  const getNextVersion = (size?: string, excludeIndex?: number): number => {
+    const base = getSkuBase(productSku);
+    const sizeDigits = size ? size.replace(/[^0-9.]/g, '').replace('.', '').padStart(2, '0') : '01';
+
+    let maxVersion = 0;
+    variants.forEach((v, i) => {
+      if (excludeIndex !== undefined && i === excludeIndex) return;
+      if (!v.sku) return;
+      const parts = v.sku.split('-');
+      if (parts.slice(0, 2).join('-') !== base) return;
+      if (parts[2] !== sizeDigits) return;
+      const ver = parseInt(parts[3] || '0', 10);
+      if (ver > maxVersion) maxVersion = ver;
+    });
+    return maxVersion + 1;
+  };
+
   const addVariant = () => {
+    const versionNum = getNextVersion(undefined);
     const newVariant: ProductVariant = {
       colorHex: "#000000",
       id: Math.random().toString(36).substring(7),
-      sku: `${productSku}-VAR-${variants.length + 1}`,
+      sku: buildVariantSku(productSku, undefined, versionNum),
       size: undefined,
       color: undefined,
       stock: 0,
@@ -108,6 +132,16 @@ export function VariantEditor({
       [option]: value || undefined,
       updatedAt: new Date().toISOString(),
     };
+
+    // ─── Auto-regenerar SKU cuando cambia la talla ────────────────────────
+    if (option === "size" && productSku) {
+      updated[index].sku = replaceSkuSize(
+        updated[index].sku || "",
+        productSku,
+        value || undefined,
+      );
+    }
+
     handleVariantsChange(updated);
   };
 
@@ -135,48 +169,42 @@ export function VariantEditor({
     if (sizes.length > 0 && colors.length > 0) {
       // Combinación de tallas y colores
       sizes.forEach((size) => {
-        colors.forEach((color) => {
-          const sizeCode = size.replace(/\s+/g, "");
-          const colorCode = color.substring(0, 3).toUpperCase();
+        colors.forEach((color, colorIdx) => {
           generated.push({
             id: Math.random().toString(36).substring(7),
-            sku: `${productSku}-${sizeCode}-${colorCode}`,
+            sku: buildVariantSku(productSku, size, colorIdx + 1),
             size: size,
             color: color,
             stock: 0,
-            colorHex: "#000000", // ← agrega
+            colorHex: "#000000",
             updatedAt: new Date().toISOString(),
           });
         });
       });
     } else if (sizes.length > 0) {
-      // Solo tallas
+      // Solo tallas — cada talla es versión 01
       sizes.forEach((size) => {
-        // ← falta esto
-        const sizeCode = size.replace(/\s+/g, "");
         generated.push({
           id: Math.random().toString(36).substring(7),
-          sku: `${productSku}-${sizeCode}`,
+          sku: buildVariantSku(productSku, size, 1),
           size: size,
           stock: 0,
-          colorHex: "#000000", // ← agrega
+          colorHex: "#000000",
           updatedAt: new Date().toISOString(),
         });
-      }); // ← y el cierre
+      });
     } else {
-      // Solo colores
-      colors.forEach((color) => {
-        // ← falta esto
-        const colorCode = color.substring(0, 3).toUpperCase();
+      // Solo colores — sin talla, versión incremental
+      colors.forEach((color, idx) => {
         generated.push({
           id: Math.random().toString(36).substring(7),
-          sku: `${productSku}-${colorCode}`,
+          sku: buildVariantSku(productSku, undefined, idx + 1),
           color: color,
           stock: 0,
-          colorHex: "#000000", // ← agrega
+          colorHex: "#000000",
           updatedAt: new Date().toISOString(),
         });
-      }); // ← y el cierre
+      });
     }
 
     handleVariantsChange([...variants, ...generated]);
@@ -381,7 +409,7 @@ export function VariantEditor({
                         <div className="flex items-center gap-1">
                           {/* Prefijo no editable: MARCA-NUMERO */}
                           <span className="px-2 py-2 text-xs bg-gray-100 border border-gray-300 rounded-lg text-gray-500 whitespace-nowrap">
-                            {productSku.split("-").slice(0, 2).join("-")}-
+                            {getSkuBase(productSku)}-
                           </span>
                           {/* SIZE-VERSION editable */}
                           <Input
@@ -394,13 +422,11 @@ export function VariantEditor({
                               const suffix = e.target.value
                                 .toUpperCase()
                                 .replace(/[^0-9-]/g, "");
-                              const parentBase = productSku
-                                .split("-")
-                                .slice(0, 2)
+                              const base = getSkuBase(productSku);
                               updateVariant(
                                 index,
                                 "sku",
-                                `${parentBase}-${suffix}`,
+                                `${base}-${suffix}`,
                               );
                             }}
                             className={skuError ? "border-red-500" : ""}
