@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, Wand2 } from "lucide-react";
 import { Card } from "./ui/card";
 import { Switch } from "./ui/switch";
@@ -7,12 +7,12 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ProductVariant } from "../types/product";
 import { useProductsStore } from "../store/ProductsContext";
-import { ColorPicker } from "./ColorPicker";
 import {
   getSkuBase,
   buildVariantSku,
   replaceSkuSize,
 } from "../config/skuConfig";
+import { useColors } from "../store/ColorsContext";
 
 interface VariantEditorProps {
   variants: ProductVariant[];
@@ -45,10 +45,14 @@ export function VariantEditor({
   variantErrors = {},
 }: VariantEditorProps) {
   const { isSkuAvailable } = useProductsStore();
+  const { colors } = useColors();
+
+  console.log("[VariantEditor] colors desde context:", colors.length, colors);
+
   const [showGenerator, setShowGenerator] = useState(false);
   const [generatorData, setGeneratorData] = useState({
     sizes: "",
-    colors: "",
+    selectedColorIds: [] as string[],
   });
 
   const totalStock = variants.reduce((sum, v) => sum + (v.stock || 0), 0);
@@ -78,16 +82,21 @@ export function VariantEditor({
   // ─── Calcular siguiente número de versión disponible ──────────────────────
   const getNextVersion = (size?: string, excludeIndex?: number): number => {
     const base = getSkuBase(productSku);
-    const sizeDigits = size ? size.replace(/[^0-9.]/g, '').replace('.', '').padStart(2, '0') : '01';
+    const sizeDigits = size
+      ? size
+          .replace(/[^0-9.]/g, "")
+          .replace(".", "")
+          .padStart(2, "0")
+      : "01";
 
     let maxVersion = 0;
     variants.forEach((v, i) => {
       if (excludeIndex !== undefined && i === excludeIndex) return;
       if (!v.sku) return;
-      const parts = v.sku.split('-');
-      if (parts.slice(0, 2).join('-') !== base) return;
+      const parts = v.sku.split("-");
+      if (parts.slice(0, 2).join("-") !== base) return;
       if (parts[2] !== sizeDigits) return;
-      const ver = parseInt(parts[3] || '0', 10);
+      const ver = parseInt(parts[3] || "0", 10);
       if (ver > maxVersion) maxVersion = ver;
     });
     return maxVersion + 1;
@@ -96,11 +105,12 @@ export function VariantEditor({
   const addVariant = () => {
     const versionNum = getNextVersion(undefined);
     const newVariant: ProductVariant = {
-      colorHex: "#000000",
       id: Math.random().toString(36).substring(7),
       sku: buildVariantSku(productSku, undefined, versionNum),
       size: undefined,
+      colorId: undefined,
       color: undefined,
+      colorHex: undefined,
       stock: 0,
       updatedAt: new Date().toISOString(),
     };
@@ -127,19 +137,31 @@ export function VariantEditor({
     value: string,
   ) => {
     const updated = [...variants];
-    updated[index] = {
-      ...updated[index],
-      [option]: value || undefined,
-      updatedAt: new Date().toISOString(),
-    };
 
-    // ─── Auto-regenerar SKU cuando cambia la talla ────────────────────────
-    if (option === "size" && productSku) {
-      updated[index].sku = replaceSkuSize(
-        updated[index].sku || "",
-        productSku,
-        value || undefined,
-      );
+    if (option === "color") {
+      // value es el colorId — resolver nombre y hex desde el catálogo
+      const found = colors.find((c) => c.id === value);
+      updated[index] = {
+        ...updated[index],
+        colorId: value || undefined,
+        color: found?.name ?? undefined,
+        colorHex: found?.hex ?? undefined,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      updated[index] = {
+        ...updated[index],
+        [option]: value || undefined,
+        updatedAt: new Date().toISOString(),
+      };
+      // ─── Auto-regenerar SKU cuando cambia la talla ──────────────────────
+      if (option === "size" && productSku) {
+        updated[index].sku = replaceSkuSize(
+          updated[index].sku || "",
+          productSku,
+          value || undefined,
+        );
+      }
     }
 
     handleVariantsChange(updated);
@@ -155,53 +177,50 @@ export function VariantEditor({
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const colors = generatorData.colors
-      .split(",")
-      .map((c) => c.trim())
-      .filter(Boolean);
 
-    if (sizes.length === 0 && colors.length === 0) {
-      return;
-    }
+    // Resolver colores seleccionados desde el catálogo
+    const selectedColors = generatorData.selectedColorIds
+      .map((id) => colors.find((c) => c.id === id))
+      .filter(Boolean) as Color[];
+
+    if (sizes.length === 0 && selectedColors.length === 0) return;
 
     const generated: ProductVariant[] = [];
 
-    if (sizes.length > 0 && colors.length > 0) {
-      // Combinación de tallas y colores
+    if (sizes.length > 0 && selectedColors.length > 0) {
       sizes.forEach((size) => {
-        colors.forEach((color, colorIdx) => {
+        selectedColors.forEach((color, colorIdx) => {
           generated.push({
             id: Math.random().toString(36).substring(7),
             sku: buildVariantSku(productSku, size, colorIdx + 1),
-            size: size,
-            color: color,
+            size,
+            colorId: color.id,
+            color: color.name, // desnormalizado para mostrar en UI
+            colorHex: color.hex,
             stock: 0,
-            colorHex: "#000000",
             updatedAt: new Date().toISOString(),
           });
         });
       });
     } else if (sizes.length > 0) {
-      // Solo tallas — cada talla es versión 01
       sizes.forEach((size) => {
         generated.push({
           id: Math.random().toString(36).substring(7),
           sku: buildVariantSku(productSku, size, 1),
-          size: size,
+          size,
           stock: 0,
-          colorHex: "#000000",
           updatedAt: new Date().toISOString(),
         });
       });
     } else {
-      // Solo colores — sin talla, versión incremental
-      colors.forEach((color, idx) => {
+      selectedColors.forEach((color, idx) => {
         generated.push({
           id: Math.random().toString(36).substring(7),
           sku: buildVariantSku(productSku, undefined, idx + 1),
-          color: color,
+          colorId: color.id,
+          color: color.name,
+          colorHex: color.hex,
           stock: 0,
-          colorHex: "#000000",
           updatedAt: new Date().toISOString(),
         });
       });
@@ -209,7 +228,7 @@ export function VariantEditor({
 
     handleVariantsChange([...variants, ...generated]);
     setShowGenerator(false);
-    setGeneratorData({ sizes: "", colors: "" });
+    setGeneratorData({ sizes: "", selectedColorIds: [] });
   };
 
   const getVariantSkuError = (
@@ -227,6 +246,29 @@ export function VariantEditor({
     // Check global availability (excluding current product)
     if (!isSkuAvailable(sku, productId)) {
       return "SKU ya existe en otro producto";
+    }
+
+    return null;
+  };
+
+  const getVariantCombinationError = (
+    variant: ProductVariant,
+    currentIndex: number,
+  ): string | null => {
+    const size = (variant.size ?? "").trim();
+    const colorId = (variant.colorId ?? "").trim();
+
+    if (!size || !colorId) return null;
+
+    const duplicateInVariants = variants.some((v, i) => {
+      if (i === currentIndex) return false;
+      return (
+        (v.size ?? "").trim() === size && (v.colorId ?? "").trim() === colorId
+      );
+    });
+
+    if (duplicateInVariants) {
+      return "La combinación color + talla ya existe";
     }
 
     return null;
@@ -306,20 +348,46 @@ export function VariantEditor({
                   <p className="text-xs text-gray-500 mt-1">Opcional</p>
                 </div>
                 <div>
-                  <Label htmlFor="gen-colors">
-                    Colores (separados por coma)
-                  </Label>
-                  <Input
-                    id="gen-colors"
-                    placeholder="Ej: Negro, Café, Miel"
-                    value={generatorData.colors}
-                    onChange={(e) =>
-                      setGeneratorData((prev) => ({
-                        ...prev,
-                        colors: e.target.value,
-                      }))
-                    }
-                  />
+                  <Label>Colores</Label>
+                  {colors.length === 0 ? (
+                    <p className="text-xs text-gray-400 mt-1">
+                      No hay colores disponibles
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {colors.map((c) => {
+                        const selected =
+                          generatorData.selectedColorIds.includes(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() =>
+                              setGeneratorData((prev) => ({
+                                ...prev,
+                                selectedColorIds: selected
+                                  ? prev.selectedColorIds.filter(
+                                      (id) => id !== c.id,
+                                    )
+                                  : [...prev.selectedColorIds, c.id],
+                              }))
+                            }
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-all ${
+                              selected
+                                ? "border-blue-500 bg-blue-50 text-blue-700"
+                                : "border-gray-300 text-gray-600 hover:border-gray-400"
+                            }`}
+                          >
+                            <span
+                              className="w-3 h-3 rounded-full flex-shrink-0 border border-gray-300"
+                              style={{ backgroundColor: c.hex }}
+                            />
+                            {c.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">Opcional</p>
                 </div>
               </div>
@@ -333,7 +401,7 @@ export function VariantEditor({
                   variant="outline"
                   onClick={() => {
                     setShowGenerator(false);
-                    setGeneratorData({ sizes: "", colors: "" });
+                    setGeneratorData({ sizes: "", selectedColorIds: [] });
                   }}
                 >
                   Cancelar
@@ -351,6 +419,10 @@ export function VariantEditor({
             ) : (
               variants.map((variant, index) => {
                 const skuError = getVariantSkuError(variant.sku, index);
+                const combinationError = getVariantCombinationError(
+                  variant,
+                  index,
+                );
                 const hasOptions = variant.size || variant.color;
 
                 return (
@@ -384,21 +456,42 @@ export function VariantEditor({
 
                       {/* Color */}
                       <div className="col-span-2">
-                        <Label htmlFor={`variant-color-${index}`}>Color</Label>
-                        <Input
+                        <Label htmlFor={`variant-color-${index}`}>
+                          Color <span className="text-red-500">*</span>
+                        </Label>
+                        <select
                           id={`variant-color-${index}`}
-                          placeholder="Negro"
-                          value={variant.color || ""}
+                          value={variant.colorId || ""}
                           onChange={(e) =>
                             updateVariantOption(index, "color", e.target.value)
                           }
                           disabled={disabled}
-                          className={
+                          required
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
                             variantErrors[`variant-${index}-options`]
                               ? "border-red-500"
-                              : ""
-                          }
-                        />
+                              : "border-gray-300"
+                          }`}
+                        >
+                          <option value="">Selecciona un color</option>
+                          {colors.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        {/* Muestra el hex del color seleccionado */}
+                        {variant.colorHex && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <div
+                              className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0"
+                              style={{ backgroundColor: variant.colorHex }}
+                            />
+                            <span className="text-xs text-gray-500">
+                              {variant.colorHex}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {/* SKU */}
@@ -423,20 +516,22 @@ export function VariantEditor({
                                 .toUpperCase()
                                 .replace(/[^0-9-]/g, "");
                               const base = getSkuBase(productSku);
-                              updateVariant(
-                                index,
-                                "sku",
-                                `${base}-${suffix}`,
-                              );
+                              updateVariant(index, "sku", `${base}-${suffix}`);
                             }}
                             className={skuError ? "border-red-500" : ""}
                             disabled={disabled || disableSku}
                             maxLength={9}
                           />
                         </div>
+
                         {skuError && (
                           <p className="text-xs text-red-500 mt-1">
                             {skuError}
+                          </p>
+                        )}
+                        {combinationError && (
+                          <p className="text-xs text-red-500 mt-1">
+                            {combinationError}
                           </p>
                         )}
                       </div>
@@ -487,18 +582,6 @@ export function VariantEditor({
                             : `Heredado: $${productPrice}`}
                         </p>
                       </div>
-                      {/* Segunda fila: Color Hex */}
-                      <div className="col-span-12 border-t pt-3">
-                        <ColorPicker
-                          label="Color visual"
-                          value={variant.colorHex || "#000000"}
-                          onChange={(color) =>
-                            updateVariant(index, "colorHex", color)
-                          }
-                          disabled={disabled}
-                        />
-                      </div>
-
                       {/* Delete */}
                       <div className="col-span-1 flex items-end">
                         <Button

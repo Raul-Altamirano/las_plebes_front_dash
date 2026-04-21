@@ -25,6 +25,7 @@ const menuItems = [
   { path: '/products', label: 'Productos', icon: Package, disabled: false, permission: 'product:read' as const },
   { path: '/categories', label: 'Categorías', icon: Tags, disabled: false, permission: 'category:read' as const },
   { path: '/promotions', label: 'Promociones', icon: Percent, disabled: false, permission: 'promo:read' as const },
+  { path: '/colors', label: 'Color', icon: Ticket, disabled: false, permission: 'coupon:read' as const },
   { path: '/coupons', label: 'Cupones', icon: Ticket, disabled: false, permission: 'coupon:read' as const },
   { path: '/orders', label: 'Pedidos', icon: ShoppingCart, disabled: false, permission: 'order:read' as const },
   { path: '/rma', label: 'Cambios/Devoluciones', icon: RefreshCw, disabled: false, permission: 'rma:read' as const },

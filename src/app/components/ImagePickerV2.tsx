@@ -304,8 +304,7 @@ export function ImagePickerV2({
           <p className="text-sm font-medium text-gray-700 mb-3">
             Imágenes del producto ({allImages.length}/{maxImages})
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {allImages.map((image) => {
+<div className="grid grid-cols-3 md:grid-cols-6 gap-3">            {allImages.map((image) => {
               const isHovered = hoveredImageId === image.id;
               const isUploading = uploadingIds.has(image.id);
               return (

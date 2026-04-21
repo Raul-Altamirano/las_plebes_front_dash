@@ -42,6 +42,7 @@ import { UsersAndRoles } from './pages/UsersAndRoles';
 import { Audit } from './pages/Audit';
 import Login from './pages/Login';
 import { SearchResults } from './pages/SearchResults';
+import ColorsPage from './pages/ColorsPage';
 
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -109,6 +110,7 @@ function AppLayout() {
                   </RequirePermission>
                 } 
               />
+              <Route path="/colors" element={<ColorsPage/>} />
               <Route 
                 path="/products/:id/edit" 
                 element={

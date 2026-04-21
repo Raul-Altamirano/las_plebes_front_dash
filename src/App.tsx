@@ -65,6 +65,10 @@ import { AppProvider } from "./app/store/AppContext";
 import { PaymentsProvider } from "./app/store/PaymentsContext";
 import { Payments } from "./app/pages/Payments";
 
+import { ColorsProvider } from "./app/store/ColorsContext";
+
+
+
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -352,6 +356,7 @@ function App() {
                         <AuditProvider>
                           <ProductsProvider>
                             <CategoriesProvider>
+                             <ColorsProvider>
                               <PromotionsProvider>
                                 <CouponsProvider>
                                   <CustomersProvider>
@@ -373,6 +378,7 @@ function App() {
                                   </CustomersProvider>
                                 </CouponsProvider>
                               </PromotionsProvider>
+                              </ColorsProvider>
                             </CategoriesProvider>
                           </ProductsProvider>
                         </AuditProvider>

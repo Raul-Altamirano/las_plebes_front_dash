@@ -12,14 +12,19 @@ import {
 } from "lucide-react";
 import { useProductsStore } from "../store/ProductsContext";
 import { useCategories } from "../store/CategoryContext";
-import { ColorPicker } from "../components/ColorPicker";
+import { useColors } from "../store/ColorsContext";
 import { useToast } from "../store/ToastContext";
 import { useAuth } from "../store/AuthContext";
 import { useAudit } from "../store/AuditContext";
 import { ImagePickerV2 } from "../components/ImagePickerV2";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RequirePermission } from "../components/RequirePermission";
-import { SKU_CONFIG, buildSkuRegex, buildSkuPlaceholder, buildVariantSku } from '../config/skuConfig';
+import {
+  SKU_CONFIG,
+  buildSkuRegex,
+  buildSkuPlaceholder,
+  buildVariantSku,
+} from "../config/skuConfig";
 import { VariantEditor } from "../components/VariantEditor";
 import { VariantImagesSection } from "../components/VariantImagesSection"; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
 import {
@@ -38,6 +43,7 @@ import type {
   ProductStatus,
   ProductImage,
   ProductVariant,
+  ColorGroup,
 } from "../types/product";
 import { Switch } from "../components/ui/switch";
 import { Label } from "../components/ui/label";
@@ -75,6 +81,10 @@ export function ProductForm() {
   const { products, createProduct, updateProduct, getById } =
     useProductsStore();
   const { categories, getById: getCategoryById } = useCategories();
+
+  // ─── Colores del catálogo ──────────────────────────────────────────────────
+  const { colors } = useColors();
+
   const { showToast } = useToast();
   const { currentUser, hasPermission } = useAuth();
   const { auditLog } = useAudit();
@@ -122,6 +132,7 @@ export function ProductForm() {
     hasVariants: false,
     variants: [],
     cost: 0,
+    colorGroups: [],
     trackCost: true,
   });
 
@@ -346,14 +357,65 @@ export function ProductForm() {
     }
 
     try {
-      // ─── Herencia de imágenes: variantes sin fotos propias heredan las del padre ─
+      // ─── parentImages, enrichedColorGroups y enrichedVariants ────────────────
       const parentImages = uploadedImages ?? formData.images ?? [];
-      const finalVariants = updatedVariants.map((v) => {
-        if ((!v.images || v.images.length === 0) && parentImages.length > 0) {
-          return { ...v, images: [...parentImages] };
+
+      // ─── enrichedColorGroups: asignar imágenes subidas por variante al colorGroup ─
+      const enrichedColorGroups: ColorGroup[] = (
+        formData.colorGroups || []
+      ).map((g) => {
+        const variantDeEsteColor = updatedVariants.find(
+          (v) => v.colorId === g.colorId && (v.images ?? []).length > 0,
+        );
+
+        if (variantDeEsteColor) {
+          return { ...g, images: variantDeEsteColor.images! };
         }
-        return v;
+
+        if ((g.images?.length ?? 0) > 0) {
+          return g;
+        }
+
+        if (
+          (formData.colorGroups || []).length === 1 &&
+          parentImages.length > 0
+        ) {
+          return { ...g, images: [...parentImages] };
+        }
+
+        return g;
       });
+const enrichedVariants = updatedVariants.map((v, index) => {
+  const inheritedPrice =
+    v.price !== undefined && v.price !== null && v.price > 0
+      ? v.price
+      : formData.price || 0;
+
+  const inheritedCost = formData.trackCost
+    ? (
+        v.cost !== undefined && v.cost !== null && v.cost > 0
+          ? v.cost
+          : formData.cost || 0
+      )
+    : 0;
+
+  const inheritedStock =
+    index === 0
+      ? ((v.stock ?? 0) > 0 ? v.stock! : (formData.stock || 0))
+      : (v.stock ?? 0);
+
+  return {
+    ...v,
+    price: inheritedPrice,
+    cost: inheritedCost,
+    stock: inheritedStock,
+    images: v.images ?? [],
+  };
+});
+      console.log(
+        "[handleSubmit] basePayload preview — colorGroups:",
+        enrichedColorGroups,
+      );
 
       const basePayload = {
         name: formData.name!,
@@ -363,11 +425,12 @@ export function ProductForm() {
         status: targetStatus,
         categoryId: formData.categoryId!,
         description: formData.description,
-        images: parentImages,
+        images: [], // siempre vacío, fotos viven en colorGroups
+        colorGroups: enrichedColorGroups, // ← nuevo
         updatedAt: new Date().toISOString(),
         isArchived: originalProduct?.isArchived || false,
         hasVariants: formData.hasVariants || false,
-        variants: finalVariants,
+        variants: enrichedVariants, // ← reemplaza finalVariants
         cost: formData.cost,
         colorHex: formData.colorHex || undefined,
         trackCost: formData.trackCost !== undefined ? formData.trackCost : true,
@@ -455,6 +518,27 @@ export function ProductForm() {
     setIsDirty(false);
     navigate("/products");
   };
+
+  const firstColorGroupWithImages =
+    (formData.colorGroups ?? []).find(
+      (group) => (group.images?.length ?? 0) > 0,
+    ) ?? null;
+
+  const hasColorGroupImages = (formData.colorGroups ?? []).some(
+    (group) => (group.images?.length ?? 0) > 0,
+  );
+
+  const hasLegacyImages =
+    (formData.images ?? []).length > 0 ||
+    (formData.variants ?? []).some((v) => (v.images?.length ?? 0) > 0);
+
+  const hasAnyImages = hasColorGroupImages || hasLegacyImages;
+  const skuLocked = isEdit && hasAnyImages;
+
+  const displayImages =
+    (formData.images?.length ?? 0) > 0
+      ? (formData.images ?? [])
+      : (firstColorGroupWithImages?.images ?? []);
 
   // MODO STOCK-ONLY (para usuarios OPS)
   if (isStockOnlyMode && isEdit && originalProduct) {
@@ -673,147 +757,231 @@ export function ProductForm() {
                 </p>
               )}
             </div>
-{/* SKU */}
-<div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">
-    SKU <span className="text-red-500">*</span>
-  </label>
-  {(() => {
-  const hasImages =
-    (formData.images ?? []).length > 0 ||
-    (formData.variants ?? []).some(v => (v.images ?? []).length > 0);
-  const skuLocked = isEdit && hasImages;
+            {/* SKU */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                SKU <span className="text-red-500">*</span>
+              </label>
+              {(() => {
+                const hasColorGroupImages = (formData.colorGroups ?? []).some(
+                  (group) => (group.images?.length ?? 0) > 0,
+                );
 
-  return skuLocked ? (
-    // Edición CON imágenes: bloqueado
-    <div className="flex items-center gap-2">
-      <input
-        type="text"
-        value={formData.sku || ""}
-        disabled
-        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
-      />
-      <span className="text-xs text-gray-400 whitespace-nowrap">No editable</span>
-    </div>
-  ) : (
-    // Creación O edición SIN imágenes: editable con autoformato
-    <input
-      type="text"
-      value={formData.sku || ""}
-      onChange={(e) => {
-        // Solo uppercase + permitir letras, números y guiones
-        const val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-        handleChange("sku", val);
-      }}
-      className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-        errors.sku ? "border-red-300 focus:ring-red-500" : "border-gray-300"
-      }`}
-      placeholder={buildSkuPlaceholder()}
-      maxLength={22}
-    />
-  );
-})()}
-{errors.sku && (
-  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-    <AlertCircle className="w-4 h-4" />
-    {errors.sku}
-  </p>
-)}
-{isEdit && !(
-  (formData.images ?? []).length > 0 ||
-  (formData.variants ?? []).some(v => (v.images ?? []).length > 0)
-) && (
-  <p className="mt-1 text-xs text-amber-600">
-    Sin imágenes — puedes editar el SKU. Se bloqueará al agregar imágenes.
-  </p>
-)}
-{!isEdit && (
-  <p className="mt-1 text-xs text-gray-500">
-    Formato: {buildSkuPlaceholder()} — no podrás cambiarlo una vez tengas imágenes
-  </p>
-)}
-</div>
+                // Fallback temporal MVP por si todavía hay imágenes pendientes en variantes
+                const hasLegacyImages =
+                  (formData.images ?? []).length > 0 ||
+                  (formData.variants ?? []).some(
+                    (v) => (v.images ?? []).length > 0,
+                  );
+
+                const hasAnyImages = hasColorGroupImages || hasLegacyImages;
+                const skuLocked = isEdit && hasAnyImages;
+
+                return skuLocked ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={formData.sku || ""}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
+                    />
+                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                      No editable
+                    </span>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.sku || ""}
+                    onChange={(e) => {
+                      const val = e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9-]/g, "");
+                      handleChange("sku", val);
+                    }}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
+                      errors.sku
+                        ? "border-red-300 focus:ring-red-500"
+                        : "border-gray-300"
+                    }`}
+                    placeholder={buildSkuPlaceholder()}
+                    maxLength={22}
+                  />
+                );
+              })()}
+              {errors.sku && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.sku}
+                </p>
+              )}
+              {isEdit &&
+                !(
+                  (formData.colorGroups ?? []).some(
+                    (group) => (group.images?.length ?? 0) > 0,
+                  ) ||
+                  (formData.images ?? []).length > 0 ||
+                  (formData.variants ?? []).some(
+                    (v) => (v.images ?? []).length > 0,
+                  )
+                ) && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Sin imágenes — puedes editar el SKU. Se bloqueará al agregar
+                    imágenes.
+                  </p>
+                )}
+              {!isEdit && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Formato: {buildSkuPlaceholder()} — no podrás cambiarlo una vez
+                  tengas imágenes
+                </p>
+              )}
+            </div>
             {/* Talla inicial — auto-genera primera variante */}
             {!isEdit && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Talla inicial
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: 25, 25.5, 28"
-                  value={(formData.variants ?? [])[0]?.size || ""}
-                  onChange={(e) => {
-                    const size = e.target.value.replace(/[^0-9.]/g, '');
-                    const currentVariants = [...(formData.variants || [])];
-                    const parentSku = formData.sku || '';
+              <div className="space-y-3">
+                {/* Talla inicial */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Talla inicial
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 25, 25.5, 28"
+                    value={(formData.variants ?? [])[0]?.size || ""}
+                    onChange={(e) => {
+                      const size = e.target.value.replace(/[^0-9.]/g, "");
+                      const currentVariants = [...(formData.variants || [])];
+                      const parentSku = formData.sku || "";
 
-                    if (!size) {
-                      // Si borra la talla, quitar la variante auto-generada solo si está vacía
-                      if (
-                        currentVariants.length === 1 &&
-                        !currentVariants[0].color &&
-                        (currentVariants[0].stock || 0) === 0
-                      ) {
-                        handleChange("variants", []);
-                        handleChange("hasVariants", false);
-                      } else if (currentVariants.length > 0) {
+                      if (!size) {
+                        if (
+                          currentVariants.length === 1 &&
+                          !currentVariants[0].color &&
+                          (currentVariants[0].stock || 0) === 0
+                        ) {
+                          handleChange("variants", []);
+                          handleChange("hasVariants", false);
+                        } else if (currentVariants.length > 0) {
+                          currentVariants[0] = {
+                            ...currentVariants[0],
+                            size: undefined,
+                            sku: buildVariantSku(parentSku, undefined, 1),
+                          };
+                          handleChange("variants", currentVariants);
+                        }
+                        return;
+                      }
+
+                      if (currentVariants.length === 0) {
+                        const newVariant: ProductVariant = {
+                          id: Math.random().toString(36).substring(7),
+                          sku: buildVariantSku(parentSku, size, 1),
+                          size,
+                          colorId: undefined,
+                          color: undefined,
+                          colorHex: undefined,
+                          price: formData.price || 0,
+                          cost: formData.cost || 0,
+                          stock: formData.stock || 0,
+                          updatedAt: new Date().toISOString(),
+                        };
+                        handleChange("variants", [newVariant]);
+                        handleChange("hasVariants", true);
+                      } else {
                         currentVariants[0] = {
                           ...currentVariants[0],
-                          size: undefined,
-                          sku: buildVariantSku(parentSku, undefined, 1),
+                          size,
+                          sku: buildVariantSku(parentSku, size, 1),
                         };
                         handleChange("variants", currentVariants);
+                        if (!formData.hasVariants)
+                          handleChange("hasVariants", true);
                       }
-                      return;
-                    }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Al agregar talla se crea automáticamente la primera variante
+                    vendible en la tienda
+                  </p>
+                </div>
 
-                    if (currentVariants.length === 0) {
-                      // Auto-crear primera variante
-                      const newVariant: ProductVariant = {
-                        id: Math.random().toString(36).substring(7),
-                        sku: buildVariantSku(parentSku, size, 1),
-                        size: size,
-                        color: undefined,
-                        colorHex: formData.colorHex || "#000000",
-                        price: formData.price || 0,
-                        cost: formData.cost || 0,
-                        stock: formData.stock || 0,
-                        updatedAt: new Date().toISOString(),
-                      };
-                      handleChange("variants", [newVariant]);
-                      handleChange("hasVariants", true);
-                    } else {
-                      // Actualizar talla de la primera variante
+                {/* Color inicial */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Color inicial <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={(formData.variants ?? [])[0]?.colorId || ""}
+                    onChange={(e) => {
+                      console.log(
+                        "[color select] e.target.value:",
+                        e.target.value,
+                      );
+                      console.log("[color select] colors[0]:", colors[0]);
+                      const colorId = e.target.value;
+                      const found = colors.find((c) => c.id === colorId);
+                      const currentVariants = [...(formData.variants || [])];
+                      if (currentVariants.length === 0) return;
+
+                      // Actualizar variante con colorId, color y colorHex
                       currentVariants[0] = {
                         ...currentVariants[0],
-                        size: size,
-                        sku: buildVariantSku(parentSku, size, 1),
+                        colorId: colorId || undefined,
+                        color: found?.name ?? undefined,
+                        colorHex: found?.hex ?? undefined,
                       };
-                      handleChange("variants", currentVariants);
-                      if (!formData.hasVariants) {
-                        handleChange("hasVariants", true);
+
+                      // Construir colorGroup si no existe aún
+                      const colorGroups = [...(formData.colorGroups || [])];
+                      const existingIdx = colorGroups.findIndex(
+                        (g) => g.colorId === colorId,
+                      );
+                      if (colorId && found && existingIdx === -1) {
+                        colorGroups.push({
+                          colorId: colorId,
+                          colorName: found.name,
+                          colorHex: found.hex,
+                          images: [], // se llena en handleSubmit con las fotos subidas
+                        });
                       }
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Al agregar talla se crea automáticamente la primera variante vendible en la tienda
-                </p>
+
+                      handleChange("variants", currentVariants);
+                      handleChange("colorGroups", colorGroups);
+                    }}
+                    disabled={colors.length === 0}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">
+                      {colors.length === 0
+                        ? "Cargando colores..."
+                        : "Selecciona un color"}
+                    </option>
+                    {colors.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Círculo de color seleccionado */}
+                  {(formData.variants ?? [])[0]?.colorHex && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <div
+                        className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0"
+                        style={{
+                          backgroundColor: (formData.variants ?? [])[0]
+                            ?.colorHex,
+                        }}
+                      />
+                      <span className="text-xs text-gray-500">
+                        {(formData.variants ?? [])[0]?.colorHex}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-
-            <div>
-              <ColorPicker
-                label="Color del producto"
-                value={formData.colorHex || "#000000"}
-                onChange={(color) => handleChange("colorHex", color)}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Color visual del SKU padre (se hereda a variantes por defecto)
-              </p>
-            </div>
 
             {/* Category */}
             <div>
@@ -1092,7 +1260,30 @@ export function ProductForm() {
 
             <VariantEditor
               variants={formData.variants || []}
-              onChange={(variants) => handleChange("variants", variants)}
+              onChange={(variants) => {
+                handleChange("variants", variants);
+
+                // Sincronizar colorGroups con los colores usados en variantes
+                const currentGroups = [...(formData.colorGroups || [])];
+                for (const v of variants) {
+                  if (!v.colorId) continue;
+                  const alreadyExists = currentGroups.some(
+                    (g) => g.colorId === v.colorId,
+                  );
+                  if (!alreadyExists) {
+                    const found = colors.find((c) => c.id === v.colorId);
+                    if (found) {
+                      currentGroups.push({
+                        colorId: v.colorId,
+                        colorName: found.name,
+                        colorHex: found.hex,
+                        images: [], // se llena en handleSubmit
+                      });
+                    }
+                  }
+                }
+                handleChange("colorGroups", currentGroups);
+              }}
               productSku={formData.sku}
               productPrice={formData.price || 0}
               productId={id}
@@ -1100,7 +1291,6 @@ export function ProductForm() {
               onToggleVariants={(enabled) =>
                 handleChange("hasVariants", enabled)
               }
-              onStockChange={(totalStock) => handleChange("stock", totalStock)}
               error={errors.variants}
               variantErrors={errors} // ← agrega esto
             />
@@ -1150,7 +1340,7 @@ export function ProductForm() {
             </div>
 
             <ImagePickerV2
-              images={formData.images || []}
+              images={displayImages}
               onChange={(images) => handleChange("images", images)}
               error={errors.images}
               maxImages={6}
@@ -1171,10 +1361,11 @@ export function ProductForm() {
           <VariantImagesSection
             hasVariants={formData.hasVariants || false}
             variants={formData.variants || []}
-            productImages={formData.images || []}
+            productImages={displayImages}
+            colorGroups={formData.colorGroups || []}
             onVariantImagesChange={handleVariantImagesChange}
-            productId={id}
             onVariantUploadRef={handleVariantUploadRef}
+            productId={id}
           />
         </div>
       )}

@@ -5,17 +5,25 @@ export type ProductStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "OUT_OF_STOCK";
 export interface ProductImage {
   id: string;
   url: string;
-  key?: string;       // para borrar de S3
+  key?: string;
   alt?: string;
   isPrimary: boolean;
+}
+
+export interface ColorGroup {
+  colorId:  string;
+  colorName:    string;
+  colorHex: string;
+  images:   ProductImage[];
 }
 
 export interface ProductVariant {
   id: string;
   productId?: string;
   sku?: string;
-  size?: string;       // mantener para compatibilidad con BE
-  color?: string;      // mantener para compatibilidad con BE
+  size?: string;
+  color?: string;
+  colorId?: string;
   price?: number;
   cost?: number;
   colorHex?: string;
@@ -36,11 +44,12 @@ export interface Product {
   price?: number;
   cost?: number;
   stock?: number;
-  images: ProductImage[];
+  images: ProductImage[];       // siempre vacío cuando usa colorGroups
+  colorGroups?: ColorGroup[];
   hasVariants?: boolean;
   variants?: ProductVariant[];
   trackCost?: boolean;
-  isArchived?: boolean;           // <-- added property
+  isArchived?: boolean;
   colorHex?: string;
   createdAt: string;
   updatedAt: string;

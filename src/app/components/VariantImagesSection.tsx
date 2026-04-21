@@ -1,26 +1,27 @@
-import { AlertCircle, ImageIcon } from 'lucide-react';
-import type { ProductImage, ProductVariant } from '../types/product';
+// src/app/components/VariantImagesSection.tsx
+import { AlertCircle, ImageIcon, Images } from 'lucide-react';
+import type { ProductImage, ProductVariant, ColorGroup } from '../types/product';
 import { VariantImagePicker } from './VariantImagePicker';
 
 interface VariantImagesSectionProps {
   hasVariants: boolean;
   variants: ProductVariant[];
   productImages: ProductImage[];
+  colorGroups?: ColorGroup[];
   onVariantImagesChange: (variantId: string, images: ProductImage[]) => void;
-    onVariantUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
-
+  onVariantUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
   productId?: string;
 }
-
-export function VariantImagesSection({ 
-  hasVariants, 
-  variants, 
+export function VariantImagesSection({
+  hasVariants,
+  variants,
   productImages,
+  colorGroups = [],
   onVariantImagesChange,
-    onVariantUploadRef,
-  productId 
+  onVariantUploadRef,
+  productId,
 }: VariantImagesSectionProps) {
-  // Si no tiene variantes, mostrar mensaje
+
   if (!hasVariants || !variants || variants.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -46,44 +47,76 @@ export function VariantImagesSection({
     );
   }
 
-  // Agrupar variantes por color (si existe)
+  // ─── Helper: ¿el colorGroup de este colorId ya tiene imágenes? ───────────
+  const colorGroupHasImages = (colorId?: string): boolean => {
+    if (!colorId) return false;
+    const group = colorGroups.find((g) => g.colorId === colorId);
+    return (group?.images?.length ?? 0) > 0;
+  };
+
   const variantsByColor = variants.reduce((acc, variant) => {
     const color = variant.color || 'Sin color';
-    if (!acc[color]) {
-      acc[color] = [];
-    }
+    if (!acc[color]) acc[color] = [];
     acc[color].push(variant);
     return acc;
   }, {} as Record<string, ProductVariant[]>);
 
   const hasMultipleColors = Object.keys(variantsByColor).length > 1;
 
+  // ─── Card de variante: bloqueada si su colorGroup ya tiene fotos ──────────
+  const renderVariantRow = (variant: ProductVariant) => {
+    const blocked = colorGroupHasImages(variant.colorId);
+    const group   = colorGroups.find((g) => g.colorId === variant.colorId);
+
+if (blocked) {
+  return (
+    <VariantImagePicker
+      key={variant.id}
+      variant={{
+        ...variant,
+        images: group?.images ?? variant.images ?? [],
+      }}
+      productImages={productImages}
+      onChange={onVariantImagesChange}
+      productId={productId}
+      onUploadRef={onVariantUploadRef}
+    />
+  );
+}
+
+    return (
+      <VariantImagePicker
+        key={variant.id}
+        variant={variant}
+        productImages={productImages}
+        onChange={onVariantImagesChange}
+        productId={productId}
+        onUploadRef={onVariantUploadRef}
+      />
+    );
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
-      {/* Header */}
       <div className="mb-4">
         <h3 className="text-sm font-medium text-gray-900 mb-1">
           Imágenes por variante
         </h3>
         <p className="text-sm text-gray-500">
-          Asigna imágenes específicas para cada variante. Si no asignas imágenes, se usarán las del producto como fallback.
+          Las variantes cuyo color ya tiene un grupo de imágenes las heredan automáticamente.
         </p>
       </div>
 
-      {/* Warning si no hay imágenes del producto */}
-      {productImages.length === 0 && (
+      {productImages.length === 0 && colorGroups.length === 0 && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs text-yellow-800">
-              <strong>Recomendación:</strong> Sube primero las imágenes generales del producto. 
-              Luego podrás copiarlas a las variantes y personalizarlas.
-            </p>
-          </div>
+          <p className="text-xs text-yellow-800">
+            <strong>Recomendación:</strong> Sube primero las imágenes del producto.
+            Se asignarán al grupo de color automáticamente.
+          </p>
         </div>
       )}
 
-      {/* Variantes agrupadas por color (si hay múltiples colores) */}
       {hasMultipleColors ? (
         <div className="space-y-6">
           {Object.entries(variantsByColor).map(([color, colorVariants]) => (
@@ -92,35 +125,14 @@ export function VariantImagesSection({
                 {color}
               </h4>
               <div className="space-y-3">
-                {colorVariants.map((variant) => (
-                  <VariantImagePicker
-                    key={variant.id}
-                    variant={variant}
-                    productImages={productImages}
-                    onChange={onVariantImagesChange}
-                    productId={productId}
-                      onUploadRef={onVariantUploadRef}  // ← agrega esta línea
-
-                  />
-                ))}
+                {colorVariants.map(renderVariantRow)}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        // Sin agrupar si solo hay un color o ninguno
         <div className="space-y-3">
-          {variants.map((variant) => (
-            <VariantImagePicker
-              key={variant.id}
-              variant={variant}
-              productImages={productImages}
-              onChange={onVariantImagesChange}
-              productId={productId}
-                onUploadRef={onVariantUploadRef}  // ← agrega esta línea
-
-            />
-          ))}
+          {variants.map(renderVariantRow)}
         </div>
       )}
     </div>
