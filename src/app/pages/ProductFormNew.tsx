@@ -385,33 +385,33 @@ export function ProductForm() {
 
         return g;
       });
-const enrichedVariants = updatedVariants.map((v, index) => {
-  const inheritedPrice =
-    v.price !== undefined && v.price !== null && v.price > 0
-      ? v.price
-      : formData.price || 0;
+      const enrichedVariants = updatedVariants.map((v, index) => {
+        const inheritedPrice =
+          v.price !== undefined && v.price !== null && v.price > 0
+            ? v.price
+            : formData.price || 0;
 
-  const inheritedCost = formData.trackCost
-    ? (
-        v.cost !== undefined && v.cost !== null && v.cost > 0
-          ? v.cost
-          : formData.cost || 0
-      )
-    : 0;
+        const inheritedCost = formData.trackCost
+          ? v.cost !== undefined && v.cost !== null && v.cost > 0
+            ? v.cost
+            : formData.cost || 0
+          : 0;
 
-  const inheritedStock =
-    index === 0
-      ? ((v.stock ?? 0) > 0 ? v.stock! : (formData.stock || 0))
-      : (v.stock ?? 0);
+        const inheritedStock =
+          index === 0
+            ? (v.stock ?? 0) > 0
+              ? v.stock!
+              : formData.stock || 0
+            : (v.stock ?? 0);
 
-  return {
-    ...v,
-    price: inheritedPrice,
-    cost: inheritedCost,
-    stock: inheritedStock,
-    images: v.images ?? [],
-  };
-});
+        return {
+          ...v,
+          price: inheritedPrice,
+          cost: inheritedCost,
+          stock: inheritedStock,
+          images: v.images ?? [],
+        };
+      });
       console.log(
         "[handleSubmit] basePayload preview — colorGroups:",
         enrichedColorGroups,
