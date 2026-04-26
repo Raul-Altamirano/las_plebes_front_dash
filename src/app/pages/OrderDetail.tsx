@@ -8,11 +8,13 @@ import { Card } from '../components/ui/card';
 import { OrderStatusBadge } from '../components/OrderStatusBadge';
 import { RMAStatusBadge } from '../components/RMAStatusBadge';
 import { OrderTimeline } from '../components/OrderTimeline';
+import { OrderItemsTable } from '../components/OrderItemsTable';
 import {
   PAYMENT_METHOD_LABELS,
   SALES_CHANNEL_LABELS,
-  PaymentMethod,
-  SalesChannel,
+  TERMINAL_STATUSES,
+  type PaymentMethod,
+  type SalesChannel,
 } from '../types/order';
 import { RMA_TYPE_LABELS } from '../types/rma';
 import { toast } from 'sonner';
@@ -56,23 +58,20 @@ export function OrderDetail() {
     );
   }
 
-  const canUpdate = hasPermission('order:update');
+  const canUpdate  = hasPermission('order:update');
   const canFulfill = hasPermission('order:fulfill');
-  const canCancel = hasPermission('order:cancel');
+  const canCancel  = hasPermission('order:cancel');
+  const isTerminal = TERMINAL_STATUSES.includes(order.status);
 
-  const handleMarkPaid = () => {
-    const result = changeOrderStatus(order.id, 'PAID');
-    if (result.success) {
-      toast.success('Pedido marcado como pagado');
-    } else {
-      toast.error(result.error || 'Error al actualizar el pedido');
-    }
-  };
+  // ── Status transition handlers ───────────────────────────────────────────
 
-  const handleMarkFulfilled = () => {
-    const result = changeOrderStatus(order.id, 'FULFILLED');
+  const handleStatusChange = (
+    newStatus: Parameters<typeof changeOrderStatus>[1],
+    successMsg: string,
+  ) => {
+    const result = changeOrderStatus(order.id, newStatus);
     if (result.success) {
-      toast.success('Pedido marcado como entregado');
+      toast.success(successMsg);
     } else {
       toast.error(result.error || 'Error al actualizar el pedido');
     }
@@ -88,6 +87,8 @@ export function OrderDetail() {
     }
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -101,9 +102,9 @@ export function OrderDetail() {
             <p className="text-sm text-gray-500 mt-1">
               Creado el{' '}
               {new Date(order.createdAt).toLocaleDateString('es-MX', {
-                day: '2-digit',
+                day:   '2-digit',
                 month: 'long',
-                year: 'numeric',
+                year:  'numeric',
               })}
             </p>
           </div>
@@ -117,7 +118,7 @@ export function OrderDetail() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main content */}
+        {/* ── Main content ── */}
         <div className="lg:col-span-2 space-y-6">
           {/* Items */}
           <Card className="p-6">
@@ -125,47 +126,13 @@ export function OrderDetail() {
               <Package className="w-5 h-5" />
               Items del Pedido
             </h3>
-            <div className="space-y-3">
-              {order.items.map(item => (
-                <div key={item.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{item.nameSnapshot}</div>
-                    <div className="text-sm text-gray-500">
-                      SKU: {item.skuSnapshot}
-                      {item.optionsSnapshot && (
-                        <span className="ml-2">
-                          {item.optionsSnapshot.size && `Talla: ${item.optionsSnapshot.size}`}
-                          {item.optionsSnapshot.size && item.optionsSnapshot.color && ' • '}
-                          {item.optionsSnapshot.color && `Color: ${item.optionsSnapshot.color}`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right ml-4">
-                    <div className="font-medium text-gray-900">
-                      {item.qty} × ${item.unitPrice.toFixed(2)}
-                    </div>
-                    <div className="text-sm text-gray-500">${item.lineTotal.toFixed(2)}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Totals */}
-            <div className="border-t border-gray-200 mt-4 pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium text-gray-900">${order.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Descuento:</span>
-                <span className="font-medium text-gray-900">${order.discountTotal.toFixed(2)}</span>
-              </div>
-              <div className="border-t border-gray-200 pt-2 flex justify-between">
-                <span className="font-medium text-gray-900">Total:</span>
-                <span className="text-xl font-semibold text-gray-900">${order.total.toFixed(2)}</span>
-              </div>
-            </div>
+            <OrderItemsTable
+              items={order.items}
+              subtotal={order.subtotal}
+              discountTotal={order.discountTotal}
+              total={order.total}
+              showCosts
+            />
           </Card>
 
           {/* Customer info */}
@@ -174,22 +141,25 @@ export function OrderDetail() {
               <User className="w-5 h-5" />
               Información del Cliente
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div>
-                <span className="text-sm text-gray-600">Nombre:</span>
-                <div className="font-medium text-gray-900">{order.customer.name}</div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Nombre</p>
+                <p className="font-medium text-gray-900">{order.customer.name}</p>
               </div>
               {order.customer.phone && (
                 <div>
-                  <span className="text-sm text-gray-600">Teléfono:</span>
-                  <div className="font-medium text-gray-900">{order.customer.phone}</div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Teléfono</p>
+                  <p className="font-medium text-gray-900">{order.customer.phone}</p>
                 </div>
               )}
               {order.customer.email && (
                 <div>
-                  <span className="text-sm text-gray-600">Email:</span>
-                  <div className="font-medium text-gray-900">{order.customer.email}</div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Email</p>
+                  <p className="font-medium text-gray-900">{order.customer.email}</p>
                 </div>
+              )}
+              {!order.customerId && (
+                <p className="text-xs text-gray-400 italic">Cliente sin cuenta registrada</p>
               )}
             </div>
           </Card>
@@ -200,17 +170,17 @@ export function OrderDetail() {
               <CreditCard className="w-5 h-5" />
               Información de Pago
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div>
-                <span className="text-sm text-gray-600">Método de pago:</span>
-                <div className="font-medium text-gray-900">
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Método</p>
+                <p className="font-medium text-gray-900">
                   {PAYMENT_METHOD_LABELS[order.paymentMethod as PaymentMethod]}
-                </div>
+                </p>
               </div>
               {order.paymentRef && (
                 <div>
-                  <span className="text-sm text-gray-600">Referencia:</span>
-                  <div className="font-medium text-gray-900">{order.paymentRef}</div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Referencia</p>
+                  <p className="font-medium text-gray-900 font-mono text-sm">{order.paymentRef}</p>
                 </div>
               )}
             </div>
@@ -220,28 +190,52 @@ export function OrderDetail() {
           {order.notes && (
             <Card className="p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Notas Internas</h3>
-              <p className="text-gray-700 whitespace-pre-wrap">{order.notes}</p>
+              <p className="text-gray-700 whitespace-pre-wrap text-sm leading-relaxed">
+                {order.notes}
+              </p>
             </Card>
           )}
         </div>
 
-        {/* Sidebar */}
+        {/* ── Sidebar ── */}
         <div className="space-y-6">
           {/* Actions */}
           <Card className="p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Acciones</h3>
             <div className="space-y-2">
+              {/* PLACED → PAID */}
               {order.status === 'PLACED' && canUpdate && (
-                <Button onClick={handleMarkPaid} className="w-full">
+                <Button
+                  onClick={() => handleStatusChange('PAID', 'Pedido marcado como pagado')}
+                  className="w-full"
+                >
                   Marcar como Pagado
                 </Button>
               )}
+
+              {/* PAID → FULFILLED */}
               {order.status === 'PAID' && canFulfill && (
-                <Button onClick={handleMarkFulfilled} className="w-full">
+                <Button
+                  onClick={() => handleStatusChange('FULFILLED', 'Pedido marcado como entregado')}
+                  className="w-full"
+                >
                   Marcar como Entregado
                 </Button>
               )}
-              {['DRAFT', 'PLACED', 'PAID'].includes(order.status) && canCancel && (
+
+              {/* FULFILLED → COMPLETED */}
+              {order.status === 'FULFILLED' && canFulfill && (
+                <Button
+                  onClick={() => handleStatusChange('COMPLETED', 'Pedido marcado como completado ✓')}
+                  variant="outline"
+                  className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                >
+                  Cerrar Pedido
+                </Button>
+              )}
+
+              {/* Cancel (solo si no es terminal) */}
+              {!isTerminal && canCancel && (
                 <Button
                   onClick={() => setShowCancelDialog(true)}
                   variant="destructive"
@@ -250,65 +244,73 @@ export function OrderDetail() {
                   Cancelar Pedido
                 </Button>
               )}
-              {order.status === 'FULFILLED' && (
-                <div className="text-center text-sm text-gray-500 py-2">
-                  Pedido completado
-                </div>
+
+              {/* Terminal state messages */}
+              {order.status === 'COMPLETED' && (
+                <p className="text-center text-sm text-emerald-600 py-2 font-medium">
+                  ✓ Pedido cerrado correctamente
+                </p>
               )}
               {order.status === 'CANCELLED' && (
-                <div className="text-center text-sm text-red-600 py-2">
+                <p className="text-center text-sm text-red-600 py-2">
                   Pedido cancelado
-                </div>
+                </p>
+              )}
+              {order.status === 'REFUNDED' && (
+                <p className="text-center text-sm text-yellow-600 py-2">
+                  Pedido reembolsado
+                </p>
               )}
             </div>
           </Card>
 
           {/* RMA section */}
-          {hasPermission('rma:read') && (order.status === 'PAID' || order.status === 'FULFILLED') && (
-            <Card className="p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
-                <RefreshCw className="w-5 h-5" />
-                Cambios y Devoluciones
-              </h3>
-              <div className="space-y-3">
-                {hasPermission('rma:create') && (
-                  <Button
-                    onClick={() => navigate(`/rma/new?orderId=${order.id}`)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Registrar cambio/devolución
-                  </Button>
-                )}
-                {relatedRMAs.length > 0 && (
-                  <div className="space-y-2 mt-4">
-                    <div className="text-sm text-gray-600">
-                      RMAs relacionados ({relatedRMAs.length})
-                    </div>
-                    {relatedRMAs.map(rma => (
-                      <div
-                        key={rma.id}
-                        className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer"
-                        onClick={() => navigate(`/rma/${rma.id}`)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="font-medium text-sm text-gray-900">
-                              {rma.rmaNumber}
+          {hasPermission('rma:read') &&
+            ['PAID', 'FULFILLED', 'COMPLETED'].includes(order.status) && (
+              <Card className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5" />
+                  Cambios y Devoluciones
+                </h3>
+                <div className="space-y-3">
+                  {hasPermission('rma:create') && order.status !== 'COMPLETED' && (
+                    <Button
+                      onClick={() => navigate(`/rma/new?orderId=${order.id}`)}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      Registrar cambio/devolución
+                    </Button>
+                  )}
+                  {relatedRMAs.length > 0 && (
+                    <div className="space-y-2 mt-4">
+                      <p className="text-sm text-gray-600">
+                        RMAs relacionados ({relatedRMAs.length})
+                      </p>
+                      {relatedRMAs.map(rma => (
+                        <div
+                          key={rma.id}
+                          className="border rounded-lg p-3 hover:bg-gray-50 cursor-pointer"
+                          onClick={() => navigate(`/rma/${rma.id}`)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="font-medium text-sm text-gray-900">
+                                {rma.rmaNumber}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {RMA_TYPE_LABELS[rma.type]}
+                              </p>
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {RMA_TYPE_LABELS[rma.type]}
-                            </div>
+                            <RMAStatusBadge status={rma.status} />
                           </div>
-                          <RMAStatusBadge status={rma.status} />
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
 
           {/* Timeline */}
           <Card className="p-6">
@@ -324,13 +326,16 @@ export function OrderDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Cancelar pedido?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción cancelará el pedido {order.orderNumber}. Si ya se había descontado inventario, se
-              restaurará automáticamente. Esta acción no se puede deshacer.
+              Esta acción cancelará el pedido {order.orderNumber}. Si ya se había descontado
+              inventario, se restaurará automáticamente. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>No, volver</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCancel} className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction
+              onClick={handleCancel}
+              className="bg-red-600 hover:bg-red-700"
+            >
               Sí, cancelar pedido
             </AlertDialogAction>
           </AlertDialogFooter>

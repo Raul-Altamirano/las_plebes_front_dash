@@ -1,6 +1,14 @@
 // Order module types
 
-export type OrderStatus = 'DRAFT' | 'PLACED' | 'PAID' | 'FULFILLED' | 'CANCELLED' | 'REFUNDED' | 'HOLD_REVIEW';
+export type OrderStatus =
+  | 'DRAFT'
+  | 'PLACED'
+  | 'PAID'
+  | 'FULFILLED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'REFUNDED'
+  | 'HOLD_REVIEW';
 
 export type PaymentMethod = 'CASH' | 'TRANSFER' | 'CARD_LINK' | 'OTHER';
 
@@ -17,10 +25,10 @@ export interface OrderItem {
   qty: number;
   lineTotal: number;
   // Costos y ganancia (snapshots al momento de venta)
-  unitCost?: number; // Snapshot del costo unitario efectivo
-  lineCostTotal?: number; // unitCost * qty
-  lineProfit?: number; // lineTotal - lineCostTotal
-  lineMarginPct?: number; // (lineProfit / lineTotal) * 100
+  unitCost?: number;       // Snapshot del costo unitario efectivo
+  lineCostTotal?: number;  // unitCost * qty
+  lineProfit?: number;     // lineTotal - lineCostTotal
+  lineMarginPct?: number;  // (lineProfit / lineTotal) * 100
 }
 
 export interface CustomerSnapshot {
@@ -36,55 +44,61 @@ export interface Order {
   channel: SalesChannel;
   paymentMethod: PaymentMethod;
   paymentRef?: string;
-  customerId?: string;  // Referencia al cliente en directorio
+  customerId?: string;    // Referencia al cliente en directorio (undefined = guest)
   customer: CustomerSnapshot;
   items: OrderItem[];
   subtotal: number;
   discountTotal: number;
   total: number;
   notes?: string;
-  deliveryZip?: string; // Added for coverage integration
+  deliveryZip?: string;   // Integración con cobertura
   createdAt: string;
   updatedAt: string;
 }
 
 // Status labels
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  DRAFT: 'Borrador',
-  PLACED: 'Confirmado',
-  PAID: 'Pagado',
-  FULFILLED: 'Entregado',
-  CANCELLED: 'Cancelado',
-  REFUNDED: 'Reembolsado',
+  DRAFT:       'Borrador',
+  PLACED:      'Confirmado',
+  PAID:        'Pagado',
+  FULFILLED:   'Entregado',
+  COMPLETED:   'Completado',
+  CANCELLED:   'Cancelado',
+  REFUNDED:    'Reembolsado',
   HOLD_REVIEW: 'En revisión',
 };
 
 // Status colors for badges
 export const ORDER_STATUS_COLORS: Record<OrderStatus, 'gray' | 'blue' | 'green' | 'yellow' | 'red'> = {
-  DRAFT: 'gray',
-  PLACED: 'blue',
-  PAID: 'green',
-  FULFILLED: 'green',
-  CANCELLED: 'red',
-  REFUNDED: 'yellow',
+  DRAFT:       'gray',
+  PLACED:      'blue',
+  PAID:        'green',
+  FULFILLED:   'green',
+  COMPLETED:   'green',
+  CANCELLED:   'red',
+  REFUNDED:    'yellow',
   HOLD_REVIEW: 'yellow',
 };
 
 // Payment method labels
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
-  CASH: 'Efectivo',
-  TRANSFER: 'Transferencia',
+  CASH:      'Efectivo',
+  TRANSFER:  'Transferencia',
   CARD_LINK: 'Link de Pago',
-  OTHER: 'Otro',
+  OTHER:     'Otro',
 };
 
 // Sales channel labels
 export const SALES_CHANNEL_LABELS: Record<SalesChannel, string> = {
-  OFFLINE: 'Tienda física',
-  ONLINE: 'Tienda online',
-  WHATSAPP: 'WhatsApp',
+  OFFLINE:   'Tienda física',
+  ONLINE:    'Tienda online',
+  WHATSAPP:  'WhatsApp',
   INSTAGRAM: 'Instagram',
 };
 
+// Statuses after which no further updates are allowed
+export const TERMINAL_STATUSES: OrderStatus[] = ['COMPLETED', 'CANCELLED', 'REFUNDED'];
+
 // Configuration: when to decrement inventory
+// PLACED = inventario se descuenta al confirmar el pedido (antes de cobrar)
 export const INVENTORY_DECREMENT_ON: OrderStatus = 'PLACED';

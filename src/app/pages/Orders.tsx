@@ -64,43 +64,41 @@ export function Orders() {
 
   const handleExport = async () => {
     setIsExporting(true);
-    
-    // Simular delay mínimo para UX
+
     await new Promise(resolve => setTimeout(resolve, 200));
 
     const canViewCosts = hasPermission('cost:read');
 
     const exportData = filteredOrders.map(order => {
       const itemsCount = order.items.reduce((sum, item) => sum + item.qty, 0);
-      const totalCost = canViewCosts 
-        ? order.items.reduce((sum, item) => sum + (item.lineCostTotal || 0), 0) 
+      const totalCost = canViewCosts
+        ? order.items.reduce((sum, item) => sum + (item.lineCostTotal || 0), 0)
         : null;
-      const profit = canViewCosts && totalCost !== null 
-        ? order.total - totalCost 
-        : null;
-      const marginPct = canViewCosts && profit !== null && order.total > 0
-        ? (profit / order.total) * 100
-        : null;
+      const profit = canViewCosts && totalCost !== null ? order.total - totalCost : null;
+      const marginPct =
+        canViewCosts && profit !== null && order.total > 0
+          ? (profit / order.total) * 100
+          : null;
 
-      const row: any = {
-        orderNumber: order.orderNumber,
-        createdAt: formatDateForCSV(order.createdAt),
-        status: ORDER_STATUS_LABELS[order.status],
-        channel: SALES_CHANNEL_LABELS[order.channel as SalesChannel],
-        paymentMethod: PAYMENT_METHOD_LABELS[order.paymentMethod as PaymentMethod],
-        customerName: order.customer.name,
-        customerEmail: order.customer.email || '',
-        customerPhone: order.customer.phone || '',
-        itemsCount: itemsCount.toString(),
-        subtotal: formatMoneyForCSV(order.subtotal),
-        shipping: formatMoneyForCSV(0), // V1: no hay shipping todavía
-        total: formatMoneyForCSV(order.total),
+      const row: Record<string, string> = {
+        orderNumber:    order.orderNumber,
+        createdAt:      formatDateForCSV(order.createdAt),
+        status:         ORDER_STATUS_LABELS[order.status],
+        channel:        SALES_CHANNEL_LABELS[order.channel as SalesChannel],
+        paymentMethod:  PAYMENT_METHOD_LABELS[order.paymentMethod as PaymentMethod],
+        customerName:   order.customer.name,
+        customerEmail:  order.customer.email || '',
+        customerPhone:  order.customer.phone || '',
+        itemsCount:     itemsCount.toString(),
+        subtotal:       formatMoneyForCSV(order.subtotal),
+        shipping:       formatMoneyForCSV(0),
+        total:          formatMoneyForCSV(order.total),
       };
 
       if (canViewCosts) {
-        row.totalCost = totalCost !== null ? formatMoneyForCSV(totalCost) : '';
-        row.profit = profit !== null ? formatMoneyForCSV(profit) : '';
-        row.marginPct = marginPct !== null ? marginPct.toFixed(2) : '';
+        row.totalCost  = totalCost  !== null ? formatMoneyForCSV(totalCost)    : '';
+        row.profit     = profit     !== null ? formatMoneyForCSV(profit)       : '';
+        row.marginPct  = marginPct  !== null ? marginPct.toFixed(2)            : '';
       }
 
       return row;
@@ -108,18 +106,17 @@ export function Orders() {
 
     exportToCSV(exportData, 'pedidos');
 
-    // Auditoría
     auditLog({
       action: 'REPORT_EXPORTED',
       metadata: {
-        page: 'orders',
-        count: filteredOrders.length,
+        page:           'orders',
+        count:          filteredOrders.length,
         filtersApplied: query,
       },
     });
 
     toast.success(`CSV exportado (${filteredOrders.length} registros)`);
-    
+
     await new Promise(resolve => setTimeout(resolve, 400));
     setIsExporting(false);
   };
@@ -147,8 +144,8 @@ export function Orders() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {!canExport 
-                    ? 'No tienes permiso para exportar reportes' 
+                  {!canExport
+                    ? 'No tienes permiso para exportar reportes'
                     : 'Exporta los pedidos filtrados a un archivo CSV'}
                 </TooltipContent>
               </Tooltip>
@@ -188,8 +185,10 @@ export function Orders() {
               <SelectItem value="PLACED">Confirmado</SelectItem>
               <SelectItem value="PAID">Pagado</SelectItem>
               <SelectItem value="FULFILLED">Entregado</SelectItem>
+              <SelectItem value="COMPLETED">Completado</SelectItem>
               <SelectItem value="CANCELLED">Cancelado</SelectItem>
               <SelectItem value="REFUNDED">Reembolsado</SelectItem>
+              <SelectItem value="HOLD_REVIEW">En revisión</SelectItem>
             </SelectContent>
           </Select>
 
@@ -290,7 +289,9 @@ export function Orders() {
                     <td className="px-6 py-4">
                       <div className="text-sm">
                         <div className="font-medium text-gray-900">{order.customer.name}</div>
-                        {order.customer.phone && <div className="text-gray-500">{order.customer.phone}</div>}
+                        {order.customer.phone && (
+                          <div className="text-gray-500">{order.customer.phone}</div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -307,13 +308,17 @@ export function Orders() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(order.createdAt).toLocaleDateString('es-MX', {
-                        day: '2-digit',
+                        day:   '2-digit',
                         month: 'short',
-                        year: 'numeric',
+                        year:  'numeric',
                       })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <Button variant="ghost" size="sm" onClick={() => navigate(`/orders/${order.id}`)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                      >
                         <Eye className="w-4 h-4" />
                       </Button>
                     </td>
@@ -327,7 +332,8 @@ export function Orders() {
           {totalPages > 1 && (
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
               <div className="text-sm text-gray-500">
-                Mostrando {startIndex + 1} - {Math.min(startIndex + itemsPerPage, filteredOrders.length)} de{' '}
+                Mostrando {startIndex + 1} –{' '}
+                {Math.min(startIndex + itemsPerPage, filteredOrders.length)} de{' '}
                 {filteredOrders.length} pedidos
               </div>
               <div className="flex gap-2">

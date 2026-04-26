@@ -127,7 +127,7 @@ export function ProductForm() {
     status: "DRAFT",
     colorHex: "#000000",
     categoryId: activeCategories.length > 0 ? activeCategories[0].id : null,
-    descriptionShort: "",
+    description: "",
     images: [],
     hasVariants: false,
     variants: [],
@@ -1310,16 +1310,16 @@ export function ProductForm() {
                 Descripción corta
               </label>
               <textarea
-                value={formData.descriptionShort || ""}
+                value={formData.description || ""}
                 onChange={(e) =>
-                  handleChange("descriptionShort", e.target.value)
+                  handleChange("description", e.target.value)
                 }
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                 placeholder="Descripción breve del producto (opcional)"
               />
               <p className="mt-1 text-xs text-gray-500">
-                {(formData.descriptionShort || "").length} caracteres
+                {(formData.description || "").length} caracteres
               </p>
             </div>
           </div>
