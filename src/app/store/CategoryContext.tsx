@@ -204,15 +204,14 @@ const createCategory = useCallback(
 const isNameAvailable = useCallback(
   (name: string, excludeId?: string) =>
     !state.categories.some(
-      (c) => c.name.toLowerCase() === name.toLowerCase() && c.id !== excludeId
+      (c) => c.name?.toLowerCase() === name?.toLowerCase() && c.id !== excludeId
     ),
   [state.categories]
 );
-
 const isSlugAvailable = useCallback(
   (slug: string, excludeId?: string) =>
     !state.categories.some(
-      (c) => c.slug.toLowerCase() === slug.toLowerCase() && c.id !== excludeId
+      (c) => c.slug?.toLowerCase() === slug?.toLowerCase() && c.id !== excludeId
     ),
   [state.categories]
 );
