@@ -257,6 +257,8 @@ export default function OrderDetail() {
   // Timeline: posición actual en el flujo normal
   const timelinePos = TIMELINE_STEPS.indexOf(order.status as OrderStatus);
 
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}

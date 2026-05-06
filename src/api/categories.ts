@@ -16,6 +16,12 @@ export async function listCategories(includeDeleted = false) {
   });
 }
 
+export async function getCategoryTree() {
+  return apiFetch<{ tree: Category[] }>(`${BASE}/tree`, {
+    label: "categories.tree",
+  });
+}
+
 export async function getCategory(id: string) {
   return apiFetch<Category>(`${BASE}/${id}`, {
     label: "categories.get",
@@ -43,7 +49,6 @@ export async function deleteCategory(id: string) {
     method: "DELETE",
     label: "categories.delete",
   });
-  
 }
 
 export async function restoreCategory(id: string) {
