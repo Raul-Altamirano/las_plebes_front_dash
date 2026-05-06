@@ -1,447 +1,241 @@
-import React, { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
-import { type Order, type OrderStatus, type OrderItem, INVENTORY_DECREMENT_ON } from '../types/order';
-import { mockOrders } from '../data/mockOrders';
-import { useProductsStore } from './ProductsContext';
-import { useAudit } from './AuditContext';
-import { useAuth } from './AuthContext';
+// src/app/store/OrdersContext.tsx
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  ReactNode,
+} from "react";
 
-// Orders context and provider
-interface OrdersState {
-  orders: Order[];
-  nextOrderNumberCounter: number;
+import {
+  ordersApi,
+  OrderDTO,
+  OrderStatus,
+  CreateOrderBody,
+  ListOrdersParams,
+} from "../services/ordersApi";
+import { useAudit } from "./AuditContext";
+
+// ─── Status transitions (guard de UI) ────────────────────────────────────────
+
+const VALID_TRANSITIONS: Record<string, OrderStatus[]> = {
+  PENDING_CONTACT:    ['PLACED', 'CANCELLED'],
+  DRAFT:              ['PLACED', 'CANCELLED'],
+  PLACED:             ['PAID', 'CANCELLED'],
+  PAID:               ['READY_FOR_DELIVERY', 'CANCELLED'],
+  READY_FOR_DELIVERY: ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'],
+  OUT_FOR_DELIVERY:   ['DELIVERED', 'CANCELLED'],
+  DELIVERED:          ['COMPLETED'],
+  FULFILLED:          ['COMPLETED'],
+  HOLD_REVIEW:        ['PLACED', 'CANCELLED'],
+  COMPLETED:          [],
+  CANCELLED:          [],
+  REFUNDED:           [],
+} as Record<OrderStatus, OrderStatus[]>;
+
+export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return (VALID_TRANSITIONS[from] ?? []).includes(to);
 }
 
-type OrdersAction =
-  | { type: 'CREATE_ORDER'; payload: Order }
-  | { type: 'UPDATE_ORDER'; payload: Order }
-  | { type: 'SET_ORDERS'; payload: Order[] }
-  | { type: 'SET_COUNTER'; payload: number };
+// ─── Context shape ────────────────────────────────────────────────────────────
 
-interface OrdersContextValue {
-  orders: Order[];
-  createOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => Order | null;
-  updateOrder: (id: string, patch: Partial<Order>) => boolean;
-  getById: (id: string) => Order | undefined;
-  list: (query?: OrderQueryParams) => Order[];
-  changeOrderStatus: (orderId: string, newStatus: OrderStatus) => { success: boolean; error?: string };
+export interface OrdersContextType {
+  // Estado
+  orders: OrderDTO[];
+  total: number;
+  page: number;
+  totalPages: number;
+  loading: boolean;
+  error: string | null;
+
+  // CRUD
+  fetchOrders: (params?: ListOrdersParams) => Promise<void>;
+  getOrder: (id: string) => Promise<OrderDTO>;
+  createOrder: (body: CreateOrderBody) => Promise<OrderDTO>;
+  updateStatus: (id: string, status: OrderStatus) => Promise<void>;
+  approveReview: (id: string) => Promise<void>;
+  rejectReview: (id: string) => Promise<void>;
+
+  // Helpers
+  getOrderById: (id: string) => OrderDTO | undefined;
+  refreshOrder: (id: string) => Promise<void>;
+  canTransition: (from: OrderStatus, to: OrderStatus) => boolean;
 }
 
-export interface OrderQueryParams {
-  search?: string;
-  status?: OrderStatus;
-  channel?: string;
-  paymentMethod?: string;
-  fromDate?: string;
-  toDate?: string;
-}
+const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
 
-const OrdersContext = createContext<OrdersContextValue | null>(null);
-
-const STORAGE_KEY = 'ecommerce_admin_orders';
-const COUNTER_KEY = 'ecommerce_admin_order_counter';
-
-// Helpers
-export function formatOrderNumber(n: number): string {
-  return `ORD-${String(n).padStart(6, '0')}`;
-}
-
-export function computeOrderTotals(items: OrderItem[]): { subtotal: number; total: number } {
-  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
-  return {
-    subtotal,
-    total: subtotal, // V1: sin descuentos aplicados aún
-  };
-}
-
-function ordersReducer(state: OrdersState, action: OrdersAction): OrdersState {
-  switch (action.type) {
-    case 'CREATE_ORDER':
-      return {
-        ...state,
-        orders: [action.payload, ...state.orders],
-        nextOrderNumberCounter: state.nextOrderNumberCounter + 1,
-      };
-    case 'UPDATE_ORDER':
-      return {
-        ...state,
-        orders: state.orders.map(o => (o.id === action.payload.id ? action.payload : o)),
-      };
-    case 'SET_ORDERS':
-      return {
-        ...state,
-        orders: action.payload,
-      };
-    case 'SET_COUNTER':
-      return {
-        ...state,
-        nextOrderNumberCounter: action.payload,
-      };
-    default:
-      return state;
-  }
-}
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
-  // Get productsStore hook - this must be called at the component level
-  const productsStore = useProductsStore();
-  const audit = useAudit();
-  const auth = useAuth();
+  const { auditLog } = useAudit();
 
-  // Load initial state from localStorage
-  const [state, dispatch] = useReducer(ordersReducer, { orders: [], nextOrderNumberCounter: 1 }, () => {
+  const [orders, setOrders] = useState<OrderDTO[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cache local: id → OrderDTO para getOrderById() sin llamada extra
+  const cache = useRef<Map<string, OrderDTO>>(new Map());
+
+  const setOrdersAndCache = (list: OrderDTO[]) => {
+    list.forEach((o) => cache.current.set(o.id, o));
+    setOrders(list);
+  };
+
+  // ── fetchOrders ────────────────────────────────────────────────────────────
+
+  const fetchOrders = useCallback(async (params: ListOrdersParams = {}) => {
+    setLoading(true);
+    setError(null);
     try {
-      const storedOrders = localStorage.getItem(STORAGE_KEY);
-      const storedCounter = localStorage.getItem(COUNTER_KEY);
-      
-      // If no stored data, initialize with mock orders
-      if (!storedOrders) {
-        const maxOrderNumber = mockOrders.reduce((max, order) => {
-          const num = parseInt(order.orderNumber.replace('ORD-', ''), 10);
-          return num > max ? num : max;
-        }, 0);
-        
-        return {
-          orders: mockOrders,
-          nextOrderNumberCounter: maxOrderNumber + 1,
-        };
-      }
-      
-      return {
-        orders: storedOrders ? JSON.parse(storedOrders) : [],
-        nextOrderNumberCounter: storedCounter ? parseInt(storedCounter, 10) : 1,
-      };
-    } catch (error) {
-      console.error('Error loading orders from localStorage:', error);
-      return { orders: mockOrders, nextOrderNumberCounter: 11 };
+      const res = await ordersApi.list(params);
+      setOrdersAndCache(res.data);
+      setTotal(res.pagination.total);
+      setPage(res.pagination.page);
+      setTotalPages(res.pagination.totalPages);
+    } catch (err: any) {
+      const msg = err?.message ?? "Error al cargar pedidos";
+      setError(msg);
+      console.error("[OrdersContext] fetchOrders:", err);
+    } finally {
+      setLoading(false);
     }
-  });
+  }, []);
 
-  // Persist to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.orders));
-    localStorage.setItem(COUNTER_KEY, String(state.nextOrderNumberCounter));
-  }, [state.orders, state.nextOrderNumberCounter]);
+  // ── getOrder (con cache) ───────────────────────────────────────────────────
 
-  const createOrder = (orderDraft: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>): Order | null => {
-    const now = new Date().toISOString();
-    const newOrder: Order = {
-      ...orderDraft,
-      id: `order-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      orderNumber: formatOrderNumber(state.nextOrderNumberCounter),
-      createdAt: now,
-      updatedAt: now,
-    };
+  const getOrder = useCallback(async (id: string): Promise<OrderDTO> => {
+    if (cache.current.has(id)) return cache.current.get(id)!;
+    const order = await ordersApi.getById(id);
+    cache.current.set(order.id, order);
+    return order;
+  }, []);
 
-    dispatch({ type: 'CREATE_ORDER', payload: newOrder });
+  // ── refreshOrder (forzar re-fetch) ────────────────────────────────────────
 
-    // Log audit
-    audit.logEvent({
-      action: 'ORDER_CREATED',
-      entityType: 'order',
-      entityId: newOrder.id,
-      entityName: newOrder.orderNumber,
-      userId: auth.currentUser?.id || 'system',
-      userName: auth.currentUser?.name || 'System',
-      userRole: auth.currentUser?.role || 'ADMIN',
-      metadata: {
-        status: newOrder.status,
-        channel: newOrder.channel,
-        total: newOrder.total,
-        itemsCount: newOrder.items.length,
-      },
-    });
+  const refreshOrder = useCallback(async (id: string) => {
+    const order = await ordersApi.getById(id);
+    cache.current.set(order.id, order);
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? order : o)));
+  }, []);
 
-    // If status requires inventory decrement, do it
-    if (newOrder.status === INVENTORY_DECREMENT_ON) {
-      decrementInventory(newOrder);
-    }
+  // ── createOrder ────────────────────────────────────────────────────────────
 
-    return newOrder;
-  };
-
-  const updateOrder = (id: string, patch: Partial<Order>): boolean => {
-    const existing = state.orders.find(o => o.id === id);
-    if (!existing) return false;
-
-    const updated: Order = {
-      ...existing,
-      ...patch,
-      updatedAt: new Date().toISOString(),
-    };
-
-    dispatch({ type: 'UPDATE_ORDER', payload: updated });
-    return true;
-  };
-
-  const changeOrderStatus = (orderId: string, newStatus: OrderStatus): { success: boolean; error?: string } => {
-    const order = state.orders.find(o => o.id === orderId);
-    if (!order) {
-      return { success: false, error: 'Pedido no encontrado' };
-    }
-
-    const oldStatus = order.status;
-
-    // Validations
-    if (oldStatus === newStatus) {
-      return { success: false, error: 'El pedido ya tiene ese estado' };
-    }
-
-    // Check if we need to decrement inventory
-    const shouldDecrement = newStatus === INVENTORY_DECREMENT_ON && oldStatus !== INVENTORY_DECREMENT_ON;
-    const shouldRestock = newStatus === 'CANCELLED' && oldStatus === INVENTORY_DECREMENT_ON;
-
-    // If decrementing, validate stock first
-    if (shouldDecrement) {
-      const validation = validateInventory(order);
-      if (!validation.isValid) {
-        return {
-          success: false,
-          error: `Stock insuficiente: ${validation.problems.map(p => `${p.name} (necesitas ${p.needed}, disponible ${p.available})`).join(', ')}`,
-        };
-      }
-    }
-
-    // Update status
-    const updated: Order = {
-      ...order,
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-    };
-
-    dispatch({ type: 'UPDATE_ORDER', payload: updated });
-
-    // Log audit
-    audit.logEvent({
-      action: 'ORDER_STATUS_CHANGED',
-      entityType: 'order',
-      entityId: order.id,
-      entityName: order.orderNumber,
-      userId: auth.currentUser?.id || 'system',
-      userName: auth.currentUser?.name || 'System',
-      userRole: auth.currentUser?.role || 'ADMIN',
-      changes: [{ field: 'status', from: oldStatus, to: newStatus }],
-    });
-
-    // Handle inventory changes
-    if (shouldDecrement) {
-      decrementInventory(order);
-    }
-    if (shouldRestock) {
-      restockInventory(order);
-    }
-
-    return { success: true };
-  };
-
-  // Validate inventory before decrementing
-  const validateInventory = (
-    order: Order
-  ): { isValid: boolean; problems: Array<{ name: string; needed: number; available: number }> } => {
-    const problems: Array<{ name: string; needed: number; available: number }> = [];
-
-    for (const item of order.items) {
-      const product = productsStore.getById(item.productId);
-      if (!product) continue;
-
-      if (item.variantId) {
-        const variant = product.variants?.find(v => v.id === item.variantId);
-        if (!variant) continue;
-        if (variant.stock < item.qty) {
-          problems.push({
-            name: `${item.nameSnapshot} (${item.optionsSnapshot?.size || ''} ${item.optionsSnapshot?.color || ''})`,
-            needed: item.qty,
-            available: variant.stock,
-          });
-        }
-      } else {
-        if (product.stock < item.qty) {
-          problems.push({
-            name: item.nameSnapshot,
-            needed: item.qty,
-            available: product.stock,
-          });
-        }
-      }
-    }
-
-    return {
-      isValid: problems.length === 0,
-      problems,
-    };
-  };
-
-  // Decrement inventory for order
-  const decrementInventory = (order: Order) => {
-    for (const item of order.items) {
-      const product = productsStore.getById(item.productId);
-      if (!product) continue;
-
-      if (item.variantId) {
-        // Decrement variant stock
-        const variant = product.variants?.find(v => v.id === item.variantId);
-        if (!variant) continue;
-
-        const newVariantStock = Math.max(0, variant.stock - item.qty);
-        const updatedVariants = product.variants?.map(v =>
-          v.id === item.variantId ? { ...v, stock: newVariantStock, updatedAt: new Date().toISOString() } : v
-        );
-
-        // Recalculate product stock
-        const newProductStock = updatedVariants?.reduce((sum, v) => sum + v.stock, 0) || 0;
-
-        productsStore.updateProduct({
-          ...product,
-          variants: updatedVariants,
-          stock: newProductStock,
-          updatedAt: new Date().toISOString(),
+  const createOrder = useCallback(
+    async (body: CreateOrderBody): Promise<OrderDTO> => {
+      setLoading(true);
+      try {
+        const order = await ordersApi.create(body);
+        cache.current.set(order.id, order);
+        setOrders((prev) => [order, ...prev]);
+        setTotal((prev) => prev + 1);
+        auditLog({
+          action: "ORDER_CREATED",
+          entity: { type: "order", id: order.id, label: order.orderNumber },
         });
-      } else {
-        // Decrement product stock
-        const newStock = Math.max(0, product.stock - item.qty);
-        productsStore.updateProduct({
-          ...product,
-          stock: newStock,
-          updatedAt: new Date().toISOString(),
-        });
+        return order;
+      } catch (err: any) {
+        const msg = err?.message ?? "Error al crear pedido";
+        setError(msg);
+        throw err;
+      } finally {
+        setLoading(false);
       }
-    }
+    },
+    [auditLog],
+  );
 
-    // Log audit
-    audit.logEvent({
-      action: 'INVENTORY_DECREMENTED',
-      entityType: 'order',
-      entityId: order.id,
-      entityName: order.orderNumber,
-      userId: auth.currentUser?.id || 'system',
-      userName: auth.currentUser?.name || 'System',
-      userRole: auth.currentUser?.role || 'ADMIN',
-      metadata: {
-        items: order.items.map(i => ({
-          productId: i.productId,
-          variantId: i.variantId,
-          qty: i.qty,
-          name: i.nameSnapshot,
-        })),
-      },
-    });
-  };
+  // ── updateStatus ───────────────────────────────────────────────────────────
 
-  // Restock inventory when order is cancelled
-  const restockInventory = (order: Order) => {
-    for (const item of order.items) {
-      const product = productsStore.getById(item.productId);
-      if (!product) continue;
-
-      if (item.variantId) {
-        // Restock variant
-        const variant = product.variants?.find(v => v.id === item.variantId);
-        if (!variant) continue;
-
-        const newVariantStock = variant.stock + item.qty;
-        const updatedVariants = product.variants?.map(v =>
-          v.id === item.variantId ? { ...v, stock: newVariantStock, updatedAt: new Date().toISOString() } : v
-        );
-
-        // Recalculate product stock
-        const newProductStock = updatedVariants?.reduce((sum, v) => sum + v.stock, 0) || 0;
-
-        productsStore.updateProduct({
-          ...product,
-          variants: updatedVariants,
-          stock: newProductStock,
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        // Restock product
-        const newStock = product.stock + item.qty;
-        productsStore.updateProduct({
-          ...product,
-          stock: newStock,
-          updatedAt: new Date().toISOString(),
-        });
+  const updateStatus = useCallback(
+    async (id: string, status: OrderStatus) => {
+      const prev = cache.current.get(id);
+      if (prev && !canTransition(prev.status, status)) {
+        throw new Error(`Transición inválida: ${prev.status} → ${status}`);
       }
-    }
+      const updated = await ordersApi.updateStatus(id, status);
+      cache.current.set(updated.id, updated);
+      setOrders((list) => list.map((o) => (o.id === updated.id ? updated : o)));
+      auditLog({
+        action: "ORDER_STATUS_CHANGED",
+        entity: { type: "order", id: updated.id, label: updated.orderNumber },
+        metadata: { from: prev?.status, to: status },
+      });
+    },
+    [auditLog],
+  );
 
-    // Log audit
-    audit.logEvent({
-      action: 'INVENTORY_RESTOCKED',
-      entityType: 'order',
-      entityId: order.id,
-      entityName: order.orderNumber,
-      userId: auth.currentUser?.id || 'system',
-      userName: auth.currentUser?.name || 'System',
-      userRole: auth.currentUser?.role || 'ADMIN',
-      metadata: {
-        items: order.items.map(i => ({
-          productId: i.productId,
-          variantId: i.variantId,
-          qty: i.qty,
-          name: i.nameSnapshot,
-        })),
-      },
-    });
-  };
+  // ── approveReview ──────────────────────────────────────────────────────────
 
-  const getById = (id: string): Order | undefined => {
-    return state.orders.find(o => o.id === id);
-  };
+  const approveReview = useCallback(
+    async (id: string) => {
+      const updated = await ordersApi.approveReview(id);
+      cache.current.set(updated.id, updated);
+      setOrders((list) => list.map((o) => (o.id === updated.id ? updated : o)));
+      auditLog({
+        action: "ORDER_REVIEW_APPROVED",
+        entity: { type: "order", id: updated.id, label: updated.orderNumber },
+      });
+    },
+    [auditLog],
+  );
 
-  const list = (query?: OrderQueryParams): Order[] => {
-    let filtered = [...state.orders];
+  // ── rejectReview ───────────────────────────────────────────────────────────
 
-    if (query?.search) {
-      const search = query.search.toLowerCase();
-      filtered = filtered.filter(
-        o =>
-          o.orderNumber.toLowerCase().includes(search) ||
-          o.customer.name.toLowerCase().includes(search) ||
-          o.customer.phone?.toLowerCase().includes(search) ||
-          o.customer.email?.toLowerCase().includes(search)
-      );
-    }
+  const rejectReview = useCallback(
+    async (id: string) => {
+      const updated = await ordersApi.rejectReview(id);
+      cache.current.set(updated.id, updated);
+      setOrders((list) => list.map((o) => (o.id === updated.id ? updated : o)));
+      auditLog({
+        action: "ORDER_REVIEW_REJECTED",
+        entity: { type: "order", id: updated.id, label: updated.orderNumber },
+      });
+    },
+    [auditLog],
+  );
 
-    if (query?.status) {
-      filtered = filtered.filter(o => o.status === query.status);
-    }
+  // ── getOrderById (sync, desde cache) ─────────────────────────────────────
 
-    if (query?.channel) {
-      filtered = filtered.filter(o => o.channel === query.channel);
-    }
+  const getOrderById = useCallback(
+    (id: string) => cache.current.get(id) ?? orders.find((o) => o.id === id),
+    [orders],
+  );
 
-    if (query?.paymentMethod) {
-      filtered = filtered.filter(o => o.paymentMethod === query.paymentMethod);
-    }
+  // ─────────────────────────────────────────────────────────────────────────
 
-    if (query?.fromDate) {
-      filtered = filtered.filter(o => o.createdAt >= query.fromDate!);
-    }
-
-    if (query?.toDate) {
-      filtered = filtered.filter(o => o.createdAt <= query.toDate!);
-    }
-
-    // Sort by createdAt desc
-    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    return filtered;
-  };
-
-  const value: OrdersContextValue = {
-    orders: state.orders,
-    createOrder,
-    updateOrder,
-    getById,
-    list,
-    changeOrderStatus,
-  };
-
-  return <OrdersContext.Provider value={value}>{children}</OrdersContext.Provider>;
+  return (
+    <OrdersContext.Provider
+      value={{
+        orders,
+        total,
+        page,
+        totalPages,
+        loading,
+        error,
+        fetchOrders,
+        getOrder,
+        createOrder,
+        updateStatus,
+        approveReview,
+        rejectReview,
+        getOrderById,
+        refreshOrder,
+        canTransition,
+      }}
+    >
+      {children}
+    </OrdersContext.Provider>
+  );
 }
 
-export function useOrders() {
-  const context = useContext(OrdersContext);
-  if (context === null) {
-    throw new Error('useOrders must be used within an OrdersProvider');
-  }
-  return context;
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useOrders(): OrdersContextType {
+  const ctx = useContext(OrdersContext);
+  if (!ctx) throw new Error("useOrders must be used within <OrdersProvider>");
+  return ctx;
 }

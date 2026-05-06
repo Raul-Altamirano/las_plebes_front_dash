@@ -6,8 +6,7 @@ import { AuthSmokeTest } from "./dev/AuthSmokeTest";
 import { NotesProvider } from "./app/store/NotesContext";
 import { Notes } from "./app/pages/Notes";
 import { NoteForm } from "./app/components/NoteForm";
-import { TermsAndConditions } from './app/pages/TermsAndConditions';
-
+import { TermsAndConditions } from "./app/pages/TermsAndConditions";
 
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router";
@@ -38,9 +37,9 @@ import { ProductForm } from "./app/pages/ProductFormNew";
 import { Categories } from "./app/pages/Categories";
 import Promotions from "./app/pages/Promotions";
 import Coupons from "./app/pages/Coupons";
-import { Orders } from "./app/pages/Orders";
-import { OrderNew } from "./app/pages/OrderNew";
-import { OrderDetail } from "./app/pages/OrderDetail";
+import Orders from "./app/pages/Orders";
+import OrderNew from "./app/pages/OrderNew";
+import OrderDetail from "./app/pages/OrderDetail";
 import { RMAList } from "./app/pages/RMAList";
 import { RMANew } from "./app/pages/RMANew";
 import { RMAPreview } from "./app/pages/RMAPreview";
@@ -66,8 +65,6 @@ import { PaymentsProvider } from "./app/store/PaymentsContext";
 import { Payments } from "./app/pages/Payments";
 
 import { ColorsProvider } from "./app/store/ColorsContext";
-
-
 
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -127,7 +124,6 @@ function AppLayout() {
         <main className="flex-1">
           <PageContainer>
             <Routes>
-
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/products" element={<Products />} />
@@ -344,40 +340,37 @@ function App() {
                       </PublicOnly>
                     }
                   />
-<Route path="/terms" element={<TermsAndConditions />} />
+                  <Route path="/terms" element={<TermsAndConditions />} />
 
                   <Route
-
-                  
                     path="/*"
                     element={
-                      
                       <RequireAuth>
                         <AuditProvider>
                           <ProductsProvider>
                             <CategoriesProvider>
-                             <ColorsProvider>
-                              <PromotionsProvider>
-                                <CouponsProvider>
-                                  <CustomersProvider>
-                                    <CoverageProvider>
-                                      <OrdersProvider>
-                                        <RMAProvider>
-                                          <MarketplacesProvider>
-                                            <InboxProvider>
-                                              <NotesProvider>
-                                                <PaymentsProvider>
-                                                  <AppLayout />
-                                                </PaymentsProvider>
-                                              </NotesProvider>
-                                            </InboxProvider>
-                                          </MarketplacesProvider>
-                                        </RMAProvider>
-                                      </OrdersProvider>
-                                    </CoverageProvider>
-                                  </CustomersProvider>
-                                </CouponsProvider>
-                              </PromotionsProvider>
+                              <ColorsProvider>
+                                <PromotionsProvider>
+                                  <CouponsProvider>
+                                    <CustomersProvider>
+                                      <CoverageProvider>
+                                        <OrdersProvider>
+                                          <RMAProvider>
+                                            <MarketplacesProvider>
+                                              <InboxProvider>
+                                                <NotesProvider>
+                                                  <PaymentsProvider>
+                                                    <AppLayout />
+                                                  </PaymentsProvider>
+                                                </NotesProvider>
+                                              </InboxProvider>
+                                            </MarketplacesProvider>
+                                          </RMAProvider>
+                                        </OrdersProvider>
+                                      </CoverageProvider>
+                                    </CustomersProvider>
+                                  </CouponsProvider>
+                                </PromotionsProvider>
                               </ColorsProvider>
                             </CategoriesProvider>
                           </ProductsProvider>
