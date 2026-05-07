@@ -248,45 +248,36 @@ export function ProductForm() {
       return;
     }
 
-    setIsLoading(true);
+setIsLoading(true);
     setLoadingMessage("Preparando imágenes...");
-    console.log(
-      "[variantImages] updatedVariants antes del for:",
-      (formData.variants || []).map((v) => ({
-        id: v.id,
-        sku: v.sku,
-        images: (v.images || []).map((i) => ({ id: i.id, key: i.key })),
-      })),
-    );
+
     // ─── Candado: detectar cambios ────────────────────────────────────────────
-    const uploadedImages = uploadRef.current ? await uploadRef.current() : null;
-    const hasImageChanges = uploadedImages !== null;
-
+    let uploadedImages: Awaited<ReturnType<typeof uploadRef.current extends null ? never : NonNullable<typeof uploadRef.current>>> | null = null;
     const updatedVariants = [...(formData.variants || [])];
-    console.log(
-      "[variantImages] updatedVariants:",
-      JSON.stringify(
-        updatedVariants.map((v) => ({
-          id: v.id,
-          sku: v.sku,
-          images: v.images,
-        })),
-        null,
-        2,
-      ),
-    );
 
-    for (let i = 0; i < updatedVariants.length; i++) {
-      const variant = updatedVariants[i];
-      const variantUpload = variantUploadRefs.current.get(variant.id);
-      if (variantUpload) {
-        const variantImages = await variantUpload();
-        console.log("[variantImages] resultado:", variant.sku, variantImages); // ← agrega
-        if (variantImages !== null) {
-          updatedVariants[i] = { ...variant, images: variantImages };
+    try {
+      uploadedImages = uploadRef.current ? await uploadRef.current() : null;
+
+      for (let i = 0; i < updatedVariants.length; i++) {
+        const variant = updatedVariants[i];
+        const variantUpload = variantUploadRefs.current.get(variant.id);
+        if (variantUpload) {
+          const variantImages = await variantUpload();
+          console.log("[variantImages] resultado:", variant.sku, variantImages);
+          if (variantImages !== null) {
+            updatedVariants[i] = { ...variant, images: variantImages };
+          }
         }
       }
+    } catch (uploadError) {
+      console.error("[handleSubmit] Error en uploads:", uploadError);
+      showToast("error", "Error al subir las imágenes. Intenta de nuevo.");
+      setIsLoading(false);
+      setLoadingMessage("");
+      return;
     }
+
+    const hasImageChanges = uploadedImages !== null;
 
     setLoadingMessage(
       isEdit ? "Actualizando producto..." : "Creando producto...",
