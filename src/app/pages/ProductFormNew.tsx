@@ -117,7 +117,7 @@ export function ProductForm() {
     variantUploadRefs.current.set(variantId, ref);
   };
   const activeCategories = categories.filter((c) => c.status === "ACTIVE");
-  const subcategories    = activeCategories.filter((c) => (c.level ?? 0) === 2);
+  const subcategories = activeCategories.filter((c) => (c.level ?? 0) === 2);
 
   // Form state
   const [formData, setFormData] = useState<Partial<Product>>({
@@ -991,7 +991,9 @@ export function ProductForm() {
               </label>
               <select
                 value={formData.categoryId || ""}
-                onChange={(e) => handleChange("categoryId", e.target.value || null)}
+                onChange={(e) =>
+                  handleChange("categoryId", e.target.value || null)
+                }
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
                   errors.categoryId
                     ? "border-red-300 focus:ring-red-500"
@@ -1313,9 +1315,7 @@ export function ProductForm() {
               </label>
               <textarea
                 value={formData.description || ""}
-                onChange={(e) =>
-                  handleChange("description", e.target.value)
-                }
+                onChange={(e) => handleChange("description", e.target.value)}
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                 placeholder="Descripción breve del producto (opcional)"
@@ -1368,6 +1368,8 @@ export function ProductForm() {
             onVariantImagesChange={handleVariantImagesChange}
             onVariantUploadRef={handleVariantUploadRef}
             productId={id}
+            categoryId={formData.categoryId ?? undefined} // ← ¿ya está esta línea?
+            sku={formData.sku ?? undefined}
           />
         </div>
       )}

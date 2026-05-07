@@ -11,7 +11,8 @@ interface VariantImagesSectionProps {
   onVariantImagesChange: (variantId: string, images: ProductImage[]) => void;
   onVariantUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
   productId?: string;
-  categoryId?: string | null; // ← agrega
+  categoryId?: string | null; // ← path en R2
+  sku?: string | null;        // ← SKU padre
 }
 
 export function VariantImagesSection({
@@ -22,7 +23,8 @@ export function VariantImagesSection({
   onVariantImagesChange,
   onVariantUploadRef,
   productId,
-  categoryId, // ← agrega
+  categoryId,
+  sku,
 }: VariantImagesSectionProps) {
 
   if (!hasVariants || !variants || variants.length === 0) {
@@ -50,7 +52,6 @@ export function VariantImagesSection({
     );
   }
 
-  // ─── Helper: ¿el colorGroup de este colorId ya tiene imágenes? ───────────
   const colorGroupHasImages = (colorId?: string): boolean => {
     if (!colorId) return false;
     const group = colorGroups.find((g) => g.colorId === colorId);
@@ -66,7 +67,6 @@ export function VariantImagesSection({
 
   const hasMultipleColors = Object.keys(variantsByColor).length > 1;
 
-  // ─── Card de variante ──────────────────────────────────────────────────────
   const renderVariantRow = (variant: ProductVariant) => {
     const blocked = colorGroupHasImages(variant.colorId);
     const group   = colorGroups.find((g) => g.colorId === variant.colorId);
@@ -75,14 +75,12 @@ export function VariantImagesSection({
       return (
         <VariantImagePicker
           key={variant.id}
-          variant={{
-            ...variant,
-            images: group?.images ?? variant.images ?? [],
-          }}
+          variant={{ ...variant, images: group?.images ?? variant.images ?? [] }}
           productImages={productImages}
           onChange={onVariantImagesChange}
           productId={productId}
-          categoryId={categoryId ?? undefined} // ← agrega
+          categoryId={categoryId ?? undefined}
+          sku={sku ?? undefined}
           onUploadRef={onVariantUploadRef}
         />
       );
@@ -95,7 +93,8 @@ export function VariantImagesSection({
         productImages={productImages}
         onChange={onVariantImagesChange}
         productId={productId}
-        categoryId={categoryId ?? undefined} // ← agrega
+        categoryId={categoryId ?? undefined}
+        sku={sku ?? undefined}
         onUploadRef={onVariantUploadRef}
       />
     );

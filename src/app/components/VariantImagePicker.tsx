@@ -9,7 +9,8 @@ interface VariantImagePickerProps {
   onChange: (variantId: string, images: ProductImage[]) => void;
   onUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
   productId?: string;
-  categoryId?: string; // ← agrega
+  categoryId?: string; // ← para armar path en R2
+  sku?: string;        // ← SKU padre del producto
 }
 
 export function VariantImagePicker({ 
@@ -18,7 +19,8 @@ export function VariantImagePicker({
   onChange,
   onUploadRef,
   productId,
-  categoryId, // ← agrega
+  categoryId,
+  sku,
 }: VariantImagePickerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
@@ -131,8 +133,9 @@ export function VariantImagePicker({
             onChange={handleImagesChange}
             maxImages={6}
             productId={productId}
-            categoryId={categoryId} // ← agrega
-            variantSku={variant.sku}
+            categoryId={categoryId}   // ← viaja al Lambda
+            sku={sku}                 // ← SKU padre viaja al Lambda
+            variantSku={variant.sku}  // ← SKU de la variante
             uploadRef={uploadRef}
           />
 
