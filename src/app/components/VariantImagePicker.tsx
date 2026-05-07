@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'; // ← línea 1: agrega useRef y useEffect
-import { Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react'; // ← limpia imports no usados
+import { useState, useRef, useEffect } from 'react';
+import { Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ProductImage, ProductVariant } from '../types/product';
 import { ImagePickerV2 } from './ImagePickerV2';
 
@@ -7,21 +7,22 @@ interface VariantImagePickerProps {
   variant: ProductVariant;
   productImages: ProductImage[];
   onChange: (variantId: string, images: ProductImage[]) => void;
-  onUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void; // ← agrega
+  onUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
   productId?: string;
+  categoryId?: string; // ← agrega
 }
 
 export function VariantImagePicker({ 
   variant, 
   productImages, 
   onChange,
-  onUploadRef, // ← agrega
-  productId 
+  onUploadRef,
+  productId,
+  categoryId, // ← agrega
 }: VariantImagePickerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null); // ← agrega
+  const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
 
-  // Registrar uploadRef cuando monta
   useEffect(() => {
     if (onUploadRef) {
       onUploadRef(variant.id, async () => {
@@ -29,7 +30,7 @@ export function VariantImagePicker({
         return null;
       });
     }
-  }, [variant.id, onUploadRef]); // ← agrega este useEffect completo
+  }, [variant.id, onUploadRef]);
   
   const variantImages = variant.images || [];
   const hasOwnImages = variantImages.length > 0;
@@ -125,12 +126,12 @@ export function VariantImagePicker({
             )}
           </div>
 
-          {/* ← uploadRef agregado aquí */}
           <ImagePickerV2
             images={variantImages}
             onChange={handleImagesChange}
             maxImages={6}
             productId={productId}
+            categoryId={categoryId} // ← agrega
             variantSku={variant.sku}
             uploadRef={uploadRef}
           />

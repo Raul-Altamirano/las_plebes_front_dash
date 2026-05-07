@@ -1,5 +1,5 @@
 // src/app/components/VariantImagesSection.tsx
-import { AlertCircle, ImageIcon, Images } from 'lucide-react';
+import { AlertCircle, ImageIcon } from 'lucide-react';
 import type { ProductImage, ProductVariant, ColorGroup } from '../types/product';
 import { VariantImagePicker } from './VariantImagePicker';
 
@@ -11,7 +11,9 @@ interface VariantImagesSectionProps {
   onVariantImagesChange: (variantId: string, images: ProductImage[]) => void;
   onVariantUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
   productId?: string;
+  categoryId?: string | null; // ← agrega
 }
+
 export function VariantImagesSection({
   hasVariants,
   variants,
@@ -20,6 +22,7 @@ export function VariantImagesSection({
   onVariantImagesChange,
   onVariantUploadRef,
   productId,
+  categoryId, // ← agrega
 }: VariantImagesSectionProps) {
 
   if (!hasVariants || !variants || variants.length === 0) {
@@ -63,26 +66,27 @@ export function VariantImagesSection({
 
   const hasMultipleColors = Object.keys(variantsByColor).length > 1;
 
-  // ─── Card de variante: bloqueada si su colorGroup ya tiene fotos ──────────
+  // ─── Card de variante ──────────────────────────────────────────────────────
   const renderVariantRow = (variant: ProductVariant) => {
     const blocked = colorGroupHasImages(variant.colorId);
     const group   = colorGroups.find((g) => g.colorId === variant.colorId);
 
-if (blocked) {
-  return (
-    <VariantImagePicker
-      key={variant.id}
-      variant={{
-        ...variant,
-        images: group?.images ?? variant.images ?? [],
-      }}
-      productImages={productImages}
-      onChange={onVariantImagesChange}
-      productId={productId}
-      onUploadRef={onVariantUploadRef}
-    />
-  );
-}
+    if (blocked) {
+      return (
+        <VariantImagePicker
+          key={variant.id}
+          variant={{
+            ...variant,
+            images: group?.images ?? variant.images ?? [],
+          }}
+          productImages={productImages}
+          onChange={onVariantImagesChange}
+          productId={productId}
+          categoryId={categoryId ?? undefined} // ← agrega
+          onUploadRef={onVariantUploadRef}
+        />
+      );
+    }
 
     return (
       <VariantImagePicker
@@ -91,6 +95,7 @@ if (blocked) {
         productImages={productImages}
         onChange={onVariantImagesChange}
         productId={productId}
+        categoryId={categoryId ?? undefined} // ← agrega
         onUploadRef={onVariantUploadRef}
       />
     );
