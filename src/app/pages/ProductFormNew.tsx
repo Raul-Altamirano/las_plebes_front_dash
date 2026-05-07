@@ -117,6 +117,7 @@ export function ProductForm() {
     variantUploadRefs.current.set(variantId, ref);
   };
   const activeCategories = categories.filter((c) => c.status === "ACTIVE");
+  const subcategories    = activeCategories.filter((c) => (c.level ?? 0) === 2);
 
   // Form state
   const [formData, setFormData] = useState<Partial<Product>>({
@@ -126,7 +127,7 @@ export function ProductForm() {
     stock: 0,
     status: "DRAFT",
     colorHex: "#000000",
-    categoryId: activeCategories.length > 0 ? activeCategories[0].id : null,
+    categoryId: null,
     description: "",
     images: [],
     hasVariants: false,
@@ -990,16 +991,17 @@ export function ProductForm() {
               </label>
               <select
                 value={formData.categoryId || ""}
-                onChange={(e) => handleChange("categoryId", e.target.value)}
+                onChange={(e) => handleChange("categoryId", e.target.value || null)}
                 className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
                   errors.categoryId
                     ? "border-red-300 focus:ring-red-500"
                     : "border-gray-300"
                 }`}
               >
-                {activeCategories.map((cat) => (
+                <option value="">— Selecciona una subcategoría —</option>
+                {subcategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
-                    {cat.name}
+                    {cat.path || cat.name}
                   </option>
                 ))}
               </select>
