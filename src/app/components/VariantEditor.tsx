@@ -38,6 +38,7 @@ interface ColorCard {
 
 interface VariantEditorProps {
   variants:          ProductVariant[];
+  colorGroups?:      { colorId: string; colorName: string; colorHex: string; images: any[] }[];
   onChange:          (variants: ProductVariant[]) => void;
   productSku?:       string;
   productPrice?:     number;
@@ -86,6 +87,7 @@ function colorToSlug(name: string) {
 
 export function VariantEditor({
   variants,
+  colorGroups       = [],
   onChange,
   productSku        = "",
   productPrice      = 0,
@@ -102,10 +104,53 @@ export function VariantEditor({
 }: VariantEditorProps) {
   const { colors } = useColors();
 
-  const [gender,     setGender]     = useState<Gender>("mujer");
-  const [colorCards, setColorCards] = useState<ColorCard[]>([]);
+  const [gender,        setGender]        = useState<Gender>("mujer");
+  const [colorCards,    setColorCards]    = useState<ColorCard[]>([]);
+  const [initialized,   setInitialized]   = useState(false);
 
   const sizes = getSizes(gender);
+
+  // ── Inicializar cards desde variants existentes (modo edición) ────────────
+  useEffect(() => {
+    if (initialized || !hasVariants || variants.length === 0 || colors.length === 0) return;
+
+    const colorMap = new Map<string, ColorCard>();
+    for (const v of variants) {
+      if (!v.colorId) continue;
+      if (!colorMap.has(v.colorId)) {
+        const colorDoc = colors.find((c) => c.id === v.colorId);
+        const group    = colorGroups.find((g) => g.colorId === v.colorId);
+        colorMap.set(v.colorId, {
+          tempId:        `card-init-${v.colorId}`,
+          colorId:       v.colorId,
+          colorName:     v.color    || colorDoc?.name || "",
+          colorHex:      v.colorHex || colorDoc?.hex  || "",
+          colorNumber:   (colorDoc as any)?.colorNumber ?? "01",
+          selectedSizes: [],
+          stockMode:     "per-size",
+          uniformStock:  0,
+          stockPerSize:  {},
+          images:        group?.images ?? [],
+          showStock:     false,
+        });
+      }
+      const card = colorMap.get(v.colorId)!;
+      if (v.size && !card.selectedSizes.includes(v.size)) {
+        card.selectedSizes.push(v.size);
+        card.stockPerSize[v.size] = v.stock ?? 0;
+      }
+    }
+
+    // Ordenar tallas numéricamente
+    colorMap.forEach(card => {
+      card.selectedSizes.sort((a, b) => parseFloat(a) - parseFloat(b));
+    });
+
+    const cards = Array.from(colorMap.values());
+    console.log(`[VariantEditor] init edit mode — ${cards.length} color(es) desde variants existentes`);
+    setColorCards(cards);
+    setInitialized(true);
+  }, [hasVariants, variants, colors, colorGroups, initialized]);
 
   // Sincronizar cards → variants al padre
   useEffect(() => {
@@ -195,15 +240,13 @@ export function VariantEditor({
     setColorCards((prev) => prev.map((c) => c.tempId === tempId ? { ...c, images } : c));
   };
 
-  const handleColorUploadRef = (repId: string, ref: () => Promise<ProductImage[] | null>) => {
-    if (!onVariantUploadRef) return;
-    // Registrar el ref para todas las variantes del card
-    const card = colorCards.find((c) => c.tempId === repId);
-    if (!card) return;
-    card.selectedSizes.forEach((size) => {
-      onVariantUploadRef(`${card.tempId}-${size}`, ref);
-    });
-  };
+const handleColorUploadRef = (repId: string, ref: () => Promise<ProductImage[] | null>) => {
+  if (!onVariantUploadRef) return;
+  // Solo registrar para la primera talla — evita uploads duplicados
+  const card = colorCards.find((c) => c.tempId === repId);
+  if (!card || card.selectedSizes.length === 0) return;
+  onVariantUploadRef(`${card.tempId}-${card.selectedSizes[0]}`, ref);
+};
 
   const handleToggleVariants = (enabled: boolean) => {
     if (onToggleVariants) {

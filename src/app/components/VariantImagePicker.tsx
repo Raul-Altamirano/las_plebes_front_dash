@@ -1,26 +1,31 @@
-import { useState, useRef, useEffect } from 'react';
-import { Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
-import type { ProductImage, ProductVariant } from '../types/product';
-import { ImagePickerV2 } from './ImagePickerV2';
+import { useState, useRef, useEffect } from "react";
+import { Copy, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import type { ProductImage, ProductVariant } from "../types/product";
+import { ImagePickerV2 } from "./ImagePickerV2";
 
 interface VariantImagePickerProps {
   variant: ProductVariant;
   productImages: ProductImage[];
   onChange: (variantId: string, images: ProductImage[]) => void;
-  onUploadRef?: (variantId: string, ref: () => Promise<ProductImage[] | null>) => void;
+  onUploadRef?: (
+    variantId: string,
+    ref: () => Promise<ProductImage[] | null>,
+  ) => void;
   productId?: string;
   categoryId?: string; // ← para armar path en R2
-  sku?: string;        // ← SKU padre del producto
+  sku?: string; // ← SKU padre del producto
+  variantSku?: string; // ← agregar
 }
 
-export function VariantImagePicker({ 
-  variant, 
-  productImages, 
+export function VariantImagePicker({
+  variant,
+  productImages,
   onChange,
   onUploadRef,
   productId,
   categoryId,
   sku,
+  variantSku,
 }: VariantImagePickerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const uploadRef = useRef<(() => Promise<ProductImage[] | null>) | null>(null);
@@ -33,12 +38,12 @@ export function VariantImagePicker({
       });
     }
   }, [variant.id, onUploadRef]);
-  
+
   const variantImages = variant.images || [];
   const hasOwnImages = variantImages.length > 0;
 
   const handleCopyFromProduct = () => {
-    const copiedImages = productImages.map(img => ({
+    const copiedImages = productImages.map((img) => ({
       ...img,
       id: `${variant.id}-${img.id}`,
     }));
@@ -59,7 +64,7 @@ export function VariantImagePicker({
     `SKU: ${variant.sku}`,
   ]
     .filter(Boolean)
-    .join(' | ');
+    .join(" | ");
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -75,7 +80,9 @@ export function VariantImagePicker({
           <p className="text-xs text-gray-500 mt-0.5">
             {hasOwnImages ? (
               <span className="text-green-600 font-medium">
-                {variantImages.length} imagen{variantImages.length !== 1 ? 'es' : ''} específica{variantImages.length !== 1 ? 's' : ''}
+                {variantImages.length} imagen
+                {variantImages.length !== 1 ? "es" : ""} específica
+                {variantImages.length !== 1 ? "s" : ""}
               </span>
             ) : (
               <span className="text-gray-500">
@@ -84,12 +91,12 @@ export function VariantImagePicker({
             )}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2 flex-shrink-0">
           {hasOwnImages && (
             <div className="w-10 h-10 rounded border-2 border-blue-500 overflow-hidden flex-shrink-0">
-              <img 
-                src={variantImages[0].url} 
+              <img
+                src={variantImages[0].url}
                 alt="Preview"
                 className="w-full h-full object-cover"
               />
@@ -115,7 +122,7 @@ export function VariantImagePicker({
               <Copy className="w-4 h-4" />
               Copiar desde producto
             </button>
-            
+
             {hasOwnImages && (
               <button
                 type="button"
@@ -133,17 +140,18 @@ export function VariantImagePicker({
             onChange={handleImagesChange}
             maxImages={6}
             productId={productId}
-            categoryId={categoryId}   // ← viaja al Lambda
-            sku={sku}                 // ← SKU padre viaja al Lambda
-            variantSku={variant.sku}  // ← SKU de la variante
+            categoryId={categoryId} // ← viaja al Lambda
+            sku={sku} // ← SKU padre viaja al Lambda
+            variantSku={variantSku ?? variant.sku} // ← SKU de la variante
             uploadRef={uploadRef}
           />
 
           {!hasOwnImages && productImages.length > 0 && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
               <p className="text-xs text-blue-800">
-                ℹ️ Esta variante usa las {productImages.length} imágenes generales del producto. 
-                Sube imágenes específicas o copia las del producto para personalizarlas.
+                ℹ️ Esta variante usa las {productImages.length} imágenes
+                generales del producto. Sube imágenes específicas o copia las
+                del producto para personalizarlas.
               </p>
             </div>
           )}

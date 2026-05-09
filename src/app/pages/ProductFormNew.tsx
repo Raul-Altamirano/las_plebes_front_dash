@@ -119,14 +119,16 @@ export function ProductForm() {
   const subcategories = activeCategories.filter((c) => (c.level ?? 0) === 2);
 
   // Form state
-// Pre-cargar último SKU disponible (Opción A — desde context)
+  // Pre-cargar último SKU disponible (Opción A — desde context)
   const lastSkuNumber = !isEdit
     ? (products
-        .map(p => parseInt(p.sku?.split('-')[1] || '0'))
-        .filter(n => !isNaN(n))
+        .map((p) => parseInt(p.sku?.split("-")[1] || "0"))
+        .filter((n) => !isNaN(n))
         .sort((a, b) => b - a)[0] ?? 0)
     : 0;
-const nextSku = !isEdit ? `LP-${String(lastSkuNumber + 1).padStart(5, '0')}-01-01` : '';
+  const nextSku = !isEdit
+    ? `LP-${String(lastSkuNumber + 1).padStart(5, "0")}-01-01`
+    : "";
 
   // Form state
   const [formData, setFormData] = useState<Partial<Product>>({
@@ -257,11 +259,17 @@ const nextSku = !isEdit ? `LP-${String(lastSkuNumber + 1).padStart(5, '0')}-01-0
       return;
     }
 
-setIsLoading(true);
+    setIsLoading(true);
     setLoadingMessage("Preparando imágenes...");
 
     // ─── Candado: detectar cambios ────────────────────────────────────────────
-    let uploadedImages: Awaited<ReturnType<typeof uploadRef.current extends null ? never : NonNullable<typeof uploadRef.current>>> | null = null;
+    let uploadedImages: Awaited<
+      ReturnType<
+        typeof uploadRef.current extends null
+          ? never
+          : NonNullable<typeof uploadRef.current>
+      >
+    > | null = null;
     const updatedVariants = [...(formData.variants || [])];
 
     try {
@@ -650,8 +658,8 @@ setIsLoading(true);
           </div>
         </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
+        {/* Actions */}
+        <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
           <button
             onClick={handleCancel}
             disabled={isLoading}
@@ -838,7 +846,7 @@ setIsLoading(true);
                 </p>
               )}
             </div>
-                {/* Talla inicial — auto-genera primera variante */}
+            {/* Talla inicial — auto-genera primera variante */}
             {!isEdit && (
               <div className="space-y-3">
                 {/* Talla inicial */}
@@ -1207,25 +1215,26 @@ setIsLoading(true);
 
             <VariantEditor
               variants={formData.variants || []}
-// DESPUÉS — sincroniza imágenes desde el primer variant de cada color
-onChange={(variants) => {
-  handleChange("variants", variants);
-  // Reconstruir colorGroups desde variants — toma imágenes del primer variant de cada color
-  const colorMap = new Map<string, any>();
-  for (const v of variants) {
-    if (!v.colorId) continue;
-    if (!colorMap.has(v.colorId)) {
-      const found = colors.find((c) => c.id === v.colorId);
-      colorMap.set(v.colorId, {
-        colorId:   v.colorId,
-        colorName: v.color    || found?.name || '',
-        colorHex:  v.colorHex || found?.hex  || '',
-        images:    v.images   || [],
-      });
-    }
-  }
-  handleChange("colorGroups", Array.from(colorMap.values()));
-}}
+              colorGroups={formData.colorGroups || []} // ← agregar esta línea
+              // DESPUÉS — sincroniza imágenes desde el primer variant de cada color
+              onChange={(variants) => {
+                handleChange("variants", variants);
+                // Reconstruir colorGroups desde variants — toma imágenes del primer variant de cada color
+                const colorMap = new Map<string, any>();
+                for (const v of variants) {
+                  if (!v.colorId) continue;
+                  if (!colorMap.has(v.colorId)) {
+                    const found = colors.find((c) => c.id === v.colorId);
+                    colorMap.set(v.colorId, {
+                      colorId: v.colorId,
+                      colorName: v.color || found?.name || "",
+                      colorHex: v.colorHex || found?.hex || "",
+                      images: v.images || [],
+                    });
+                  }
+                }
+                handleChange("colorGroups", Array.from(colorMap.values()));
+              }}
               productSku={formData.sku}
               productPrice={formData.price || 0}
               productId={id}
