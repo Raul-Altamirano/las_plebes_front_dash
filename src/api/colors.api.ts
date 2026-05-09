@@ -7,12 +7,13 @@ const apiFetch = createApiClient(import.meta.env.VITE_API_URL as string);
 // ─── Mapper ───────────────────────────────────────────────────────────────────
 
 const fromBe = (raw: ColorBe): Color => ({
-  id:        (raw as any).id ?? raw._id,
-  name:      raw.name,
-  slug:      raw.slug,
-  hex:       raw.hex,
-  createdAt: raw.createdAt,
-  updatedAt: raw.updatedAt,
+  id:          (raw as any).id ?? raw._id,
+  name:        raw.name,
+  slug:        raw.slug,
+  hex:         raw.hex,
+  colorNumber: (raw as any).colorNumber,   // ← agregar
+  createdAt:   raw.createdAt,
+  updatedAt:   raw.updatedAt,
 });
 
 // ─── Unwrap — BE puede devolver { items }, { data } o array directo ───────────

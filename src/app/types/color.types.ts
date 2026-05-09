@@ -24,6 +24,7 @@ export interface ColorBe {
   name: string;
   slug: string;
   hex: string;
+  colorNumber?: string;  // ← "01", "02"... asignado en catalog_colors
   createdAt: string;
   updatedAt: string;
 }
