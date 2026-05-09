@@ -26,7 +26,6 @@ import {
   buildVariantSku,
 } from "../config/skuConfig";
 import { VariantEditor } from "../components/VariantEditor";
-import { VariantImagesSection } from "../components/VariantImagesSection"; // ← agrega aquíimport { RequirePermission } from '../components/RequirePermission';
 import {
   validateProductDraft,
   validateProductActive,
@@ -120,9 +119,19 @@ export function ProductForm() {
   const subcategories = activeCategories.filter((c) => (c.level ?? 0) === 2);
 
   // Form state
+// Pre-cargar último SKU disponible (Opción A — desde context)
+  const lastSkuNumber = !isEdit
+    ? (products
+        .map(p => parseInt(p.sku?.split('-')[1] || '0'))
+        .filter(n => !isNaN(n))
+        .sort((a, b) => b - a)[0] ?? 0)
+    : 0;
+const nextSku = !isEdit ? `LP-${String(lastSkuNumber + 1).padStart(5, '0')}-01-01` : '';
+
+  // Form state
   const [formData, setFormData] = useState<Partial<Product>>({
     name: "",
-    sku: "",
+    sku: nextSku,
     price: 0,
     stock: 0,
     status: "DRAFT",
@@ -641,8 +650,8 @@ setIsLoading(true);
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
+      {/* Actions */}
+      <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
           <button
             onClick={handleCancel}
             disabled={isLoading}
@@ -717,7 +726,7 @@ setIsLoading(true);
       </div>
 
       {/* Form */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
           {/* Basic Information */}
@@ -829,7 +838,7 @@ setIsLoading(true);
                 </p>
               )}
             </div>
-            {/* Talla inicial — auto-genera primera variante */}
+                {/* Talla inicial — auto-genera primera variante */}
             {!isEdit && (
               <div className="space-y-3">
                 {/* Talla inicial */}
@@ -897,80 +906,6 @@ setIsLoading(true);
                     Al agregar talla se crea automáticamente la primera variante
                     vendible en la tienda
                   </p>
-                </div>
-
-                {/* Color inicial */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Color inicial <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={(formData.variants ?? [])[0]?.colorId || ""}
-                    onChange={(e) => {
-                      console.log(
-                        "[color select] e.target.value:",
-                        e.target.value,
-                      );
-                      console.log("[color select] colors[0]:", colors[0]);
-                      const colorId = e.target.value;
-                      const found = colors.find((c) => c.id === colorId);
-                      const currentVariants = [...(formData.variants || [])];
-                      if (currentVariants.length === 0) return;
-
-                      // Actualizar variante con colorId, color y colorHex
-                      currentVariants[0] = {
-                        ...currentVariants[0],
-                        colorId: colorId || undefined,
-                        color: found?.name ?? undefined,
-                        colorHex: found?.hex ?? undefined,
-                      };
-
-                      // Construir colorGroup si no existe aún
-                      const colorGroups = [...(formData.colorGroups || [])];
-                      const existingIdx = colorGroups.findIndex(
-                        (g) => g.colorId === colorId,
-                      );
-                      if (colorId && found && existingIdx === -1) {
-                        colorGroups.push({
-                          colorId: colorId,
-                          colorName: found.name,
-                          colorHex: found.hex,
-                          images: [], // se llena en handleSubmit con las fotos subidas
-                        });
-                      }
-
-                      handleChange("variants", currentVariants);
-                      handleChange("colorGroups", colorGroups);
-                    }}
-                    disabled={colors.length === 0}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="">
-                      {colors.length === 0
-                        ? "Cargando colores..."
-                        : "Selecciona un color"}
-                    </option>
-                    {colors.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  {/* Círculo de color seleccionado */}
-                  {(formData.variants ?? [])[0]?.colorHex && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <div
-                        className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0"
-                        style={{
-                          backgroundColor: (formData.variants ?? [])[0]
-                            ?.colorHex,
-                        }}
-                      />
-                      <span className="text-xs text-gray-500">
-                        {(formData.variants ?? [])[0]?.colorHex}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -1041,6 +976,23 @@ setIsLoading(true);
                   la información
                 </p>
               )}
+            </div>
+
+            {/* Descripción corta */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción corta
+              </label>
+              <textarea
+                value={formData.description || ""}
+                onChange={(e) => handleChange("description", e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                placeholder="Descripción breve del producto (opcional)"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                {(formData.description || "").length} caracteres
+              </p>
             </div>
           </div>
 
@@ -1255,33 +1207,31 @@ setIsLoading(true);
 
             <VariantEditor
               variants={formData.variants || []}
-              onChange={(variants) => {
-                handleChange("variants", variants);
-
-                // Sincronizar colorGroups con los colores usados en variantes
-                const currentGroups = [...(formData.colorGroups || [])];
-                for (const v of variants) {
-                  if (!v.colorId) continue;
-                  const alreadyExists = currentGroups.some(
-                    (g) => g.colorId === v.colorId,
-                  );
-                  if (!alreadyExists) {
-                    const found = colors.find((c) => c.id === v.colorId);
-                    if (found) {
-                      currentGroups.push({
-                        colorId: v.colorId,
-                        colorName: found.name,
-                        colorHex: found.hex,
-                        images: [], // se llena en handleSubmit
-                      });
-                    }
-                  }
-                }
-                handleChange("colorGroups", currentGroups);
-              }}
+// DESPUÉS — sincroniza imágenes desde el primer variant de cada color
+onChange={(variants) => {
+  handleChange("variants", variants);
+  // Reconstruir colorGroups desde variants — toma imágenes del primer variant de cada color
+  const colorMap = new Map<string, any>();
+  for (const v of variants) {
+    if (!v.colorId) continue;
+    if (!colorMap.has(v.colorId)) {
+      const found = colors.find((c) => c.id === v.colorId);
+      colorMap.set(v.colorId, {
+        colorId:   v.colorId,
+        colorName: v.color    || found?.name || '',
+        colorHex:  v.colorHex || found?.hex  || '',
+        images:    v.images   || [],
+      });
+    }
+  }
+  handleChange("colorGroups", Array.from(colorMap.values()));
+}}
               productSku={formData.sku}
               productPrice={formData.price || 0}
               productId={id}
+              categoryId={formData.categoryId ?? undefined}
+              productImages={displayImages}
+              onVariantUploadRef={handleVariantUploadRef}
               hasVariants={formData.hasVariants || false}
               onToggleVariants={(enabled) =>
                 handleChange("hasVariants", enabled)
@@ -1291,79 +1241,8 @@ setIsLoading(true);
             />
           </div>
         </div>
-
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* Description */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-            <h3 className="text-base font-semibold text-gray-900">
-              Descripción
-            </h3>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción corta
-              </label>
-              <textarea
-                value={formData.description || ""}
-                onChange={(e) => handleChange("description", e.target.value)}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                placeholder="Descripción breve del producto (opcional)"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                {(formData.description || "").length} caracteres
-              </p>
-            </div>
-          </div>
-
-          {/* Images */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">
-                Imágenes{" "}
-                {formData.status === "ACTIVE" && (
-                  <span className="text-red-500">*</span>
-                )}
-              </h3>
-              <p className="text-xs text-gray-500 mt-1">
-                Galería de hasta 6 imágenes. La primera imagen marcada como
-                "Principal" será la que se muestre en los listados.
-              </p>
-            </div>
-
-            <ImagePickerV2
-              images={displayImages}
-              onChange={(images) => handleChange("images", images)}
-              error={errors.images}
-              maxImages={6}
-              productId={id}
-              categoryId={formData.categoryId}
-              sku={formData.sku}
-              uploadRef={uploadRef} // ← nuevo
-            />
-          </div>
-        </div>
       </div>
-      {/* Imágenes por Variante */}
-      {formData.hasVariants && (formData.variants || []).length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
-          <h3 className="text-base font-semibold text-gray-900">
-            Imágenes por variante
-          </h3>
-          <VariantImagesSection
-            hasVariants={formData.hasVariants || false}
-            variants={formData.variants || []}
-            productImages={displayImages}
-            colorGroups={formData.colorGroups || []}
-            onVariantImagesChange={handleVariantImagesChange}
-            onVariantUploadRef={handleVariantUploadRef}
-            productId={id}
-            categoryId={formData.categoryId ?? undefined} // ← ¿ya está esta línea?
-            sku={formData.sku ?? undefined}
-          />
-        </div>
-      )}
+
       {/* Actions */}
       <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-4">
         <button
