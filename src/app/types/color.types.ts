@@ -1,4 +1,4 @@
-// src/app/types/color.ts
+// src/app/types/color.types.ts
 
 export interface Color {
   id: string;
@@ -12,11 +12,13 @@ export interface Color {
 export interface ColorFormData {
   name: string;
   hex: string;
+  slug?: string;
 }
 
-// BE raw shape (MongoDB _id → id)
+// BE raw shape — MongoDB usa _id
 export interface ColorBe {
-  id: string;
+  _id: string;         // ← MongoDB siempre devuelve _id
+  id?: string;         // por si el serializer del BE lo mapea a id
   tenantId: string;
   name: string;
   slug: string;

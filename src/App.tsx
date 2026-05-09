@@ -1,11 +1,9 @@
 import { apiFetch } from "./api/http";
 import { health } from "./api/identity";
-import { AuthSmokeTest } from "./dev/AuthSmokeTest";
 
 // imports
 import { NotesProvider } from "./app/store/NotesContext";
 import { Notes } from "./app/pages/Notes";
-import { NoteForm } from "./app/components/NoteForm";
 import { TermsAndConditions } from "./app/pages/TermsAndConditions";
 
 import { useState, useEffect } from "react";
@@ -65,6 +63,7 @@ import { PaymentsProvider } from "./app/store/PaymentsContext";
 import { Payments } from "./app/pages/Payments";
 
 import { ColorsProvider } from "./app/store/ColorsContext";
+import ColorsPage from "./app/pages/ColorsPage"; // ← AGREGADO
 
 function AppLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -81,6 +80,7 @@ function AppLayout() {
     if (pathname.includes("/products/") && pathname.includes("/edit"))
       return "Editar Producto";
     if (pathname === "/categories") return "Categorías";
+    if (pathname === "/colors") return "Colores"; // ← AGREGADO
     if (pathname === "/promotions") return "Promociones";
     if (pathname === "/coupons") return "Cupones";
     if (pathname === "/orders") return "Pedidos";
@@ -100,8 +100,6 @@ function AppLayout() {
     if (pathname === "/search") return "Resultados de Búsqueda";
     return "Dashboard";
   };
-
-  // Close mobile menu when route changes
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -153,6 +151,17 @@ function AppLayout() {
                   </RequirePermission>
                 }
               />
+
+              {/* ── COLORES ── */}
+              <Route
+                path="/colors"
+                element={
+                  <RequirePermission permission="product:read">
+                    <ColorsPage />
+                  </RequirePermission>
+                }
+              />
+
               <Route
                 path="/promotions"
                 element={

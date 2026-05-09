@@ -1,19 +1,13 @@
-// src/api/colors.ts
+// src/api/colors.api.ts
 import { createApiClient } from "./http";
-const apiFetch = createApiClient(
-  (import.meta.env.VITE_CATALOG_BASE_URL as string | undefined) ?? "/api/catalog-products"
-);
-
 import type { Color, ColorBe, ColorFormData } from "../app/types/color.types";
 
-export type { Color };
-
-const BASE = "/colors";
+const apiFetch = createApiClient(import.meta.env.VITE_API_URL as string);
 
 // ─── Mapper ───────────────────────────────────────────────────────────────────
 
 const fromBe = (raw: ColorBe): Color => ({
-  id:        raw.id,
+  id:        (raw as any).id ?? raw._id,
   name:      raw.name,
   slug:      raw.slug,
   hex:       raw.hex,
@@ -21,45 +15,42 @@ const fromBe = (raw: ColorBe): Color => ({
   updatedAt: raw.updatedAt,
 });
 
-// ─── API ──────────────────────────────────────────────────────────────────────
+// ─── Unwrap — BE puede devolver { items }, { data } o array directo ───────────
 
-export async function listColors() {
-  const res = await apiFetch<ColorBe[] | { data: ColorBe[] } | { items: ColorBe[] }>(BASE, {
-    label: "colors.list",
-  });
-
-  const list: ColorBe[] =
-    Array.isArray(res)  ? res        :
-    "items" in res      ? res.items  :
-    "data" in res       ? res.data   :
-    [];
-
-  return list.map(fromBe);
+function unwrapList(res: any): ColorBe[] {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.items)) return res.items;
+  if (Array.isArray(res?.data))  return res.data;
+  return [];
 }
 
-export async function createColor(payload: ColorFormData) {
-  const res = await apiFetch<{ data: ColorBe } | ColorBe>(BASE, {
+function unwrapOne(res: any): ColorBe {
+  return res?.data ?? res?.item ?? res;
+}
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
+
+export async function listColors(): Promise<Color[]> {
+  const res = await apiFetch("/colors");
+  return unwrapList(res).map(fromBe);
+}
+
+export async function createColor(body: ColorFormData): Promise<Color> {
+  const res = await apiFetch("/colors", {
     method: "POST",
-    label: "colors.create",
-    body: JSON.stringify(payload),
+    body:   JSON.stringify(body),
   });
-  const raw: ColorBe = "data" in res ? (res as { data: ColorBe }).data : (res as ColorBe);
-  return fromBe(raw);
+  return fromBe(unwrapOne(res));
 }
 
-export async function updateColor(id: string, payload: Partial<ColorFormData>) {
-  const res = await apiFetch<{ data: ColorBe } | ColorBe>(`${BASE}/${id}`, {
+export async function updateColor(id: string, body: Partial<ColorFormData>): Promise<Color> {
+  const res = await apiFetch(`/colors/${id}`, {
     method: "PUT",
-    label: "colors.update",
-    body: JSON.stringify(payload),
+    body:   JSON.stringify(body),
   });
-  const raw: ColorBe = "data" in res ? (res as { data: ColorBe }).data : (res as ColorBe);
-  return fromBe(raw);
+  return fromBe(unwrapOne(res));
 }
 
-export async function deleteColor(id: string) {
-  return apiFetch<{ ok: true }>(`${BASE}/${id}`, {
-    method: "DELETE",
-    label: "colors.delete",
-  });
+export async function deleteColor(id: string): Promise<void> {
+  await apiFetch(`/colors/${id}`, { method: "DELETE" });
 }
