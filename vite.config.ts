@@ -34,6 +34,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/meta/, "/api/v1/meta"),
       },
+      "/api/dash": {
+  target: "https://8q4cr0oale.execute-api.us-east-1.amazonaws.com",
+  changeOrigin: true,
+  rewrite: (p) => p.replace(/^\/api\/dash/, ""),
+},
     },
   },
 })

@@ -19,6 +19,10 @@
     {
       "source": "/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/api/dash/:path*",
+      "destination": "https://8q4cr0oale.execute-api.us-east-1.amazonaws.com/:path*"
     }
   ]
 }

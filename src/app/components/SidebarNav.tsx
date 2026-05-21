@@ -1,49 +1,53 @@
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Package, 
-  Tags, 
+import {
+  LayoutDashboard,
+  Package,
+  Tags,
   Percent,
-  Ticket, 
+  Ticket,
   ShoppingCart,
   UserCircle,
-  Users, 
+  Users,
   Settings,
   FileText,
   RefreshCw,
   MapPin,
   Share2,
-  MessageSquare, 
+  MessageSquare,
   StickyNote,
-  CreditCard
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
 import logo from '../../assets/logo_las_plabes.jpg';
 
 const menuItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: false, permission: undefined },
-  { path: '/products', label: 'Productos', icon: Package, disabled: false, permission: 'product:read' as const },
-  { path: '/categories', label: 'Categorías', icon: Tags, disabled: false, permission: 'category:read' as const },
-  { path: '/promotions', label: 'Promociones', icon: Percent, disabled: false, permission: 'promo:read' as const },
-  { path: '/colors', label: 'Color', icon: Ticket, disabled: false, permission: 'coupon:read' as const },
-  { path: '/coupons', label: 'Cupones', icon: Ticket, disabled: false, permission: 'coupon:read' as const },
-  { path: '/orders', label: 'Pedidos', icon: ShoppingCart, disabled: false, permission: 'order:read' as const },
-  { path: '/rma', label: 'Cambios/Devoluciones', icon: RefreshCw, disabled: false, permission: 'rma:read' as const },
-  { path: '/notes', label: 'Notas', icon: StickyNote, disabled: false, permission: 'notes:read' as const },
-  { path: '/marketplaces', label: 'Marketplaces', icon: Share2, disabled: false, permission: 'meta:read' as const }, // 👈 agregar
-  { path: '/payments', label: 'Pagos', icon: CreditCard, disabled: false, permission: 'settings:read' as const },
-  { path: '/inbox', label: 'Inbox', icon: MessageSquare, disabled: false, permission: 'order:read' as const },
-  { path: '/coverage', label: 'Cobertura', icon: MapPin, disabled: false, permission: 'coverage:read' as const },
-  { path: '/customers', label: 'Clientes', icon: UserCircle, disabled: false, permission: 'customer:read' as const },
-  { path: '/users', label: 'Usuarios y Roles', icon: Users, disabled: false, anyPermission: ['user:manage', 'role:manage'] as const },
-  { path: '/audit', label: 'Auditoría', icon: FileText, disabled: false, permission: 'audit:read' as const },
-  { path: '/settings', label: 'Configuración', icon: Settings, disabled: true, permission: undefined },
+  { path: '/dashboard',    label: 'Dashboard',           icon: LayoutDashboard, permission: undefined },
+  { path: '/products',     label: 'Productos',           icon: Package,         permission: 'product:read'  as const },
+  { path: '/categories',   label: 'Categorías',          icon: Tags,            permission: 'category:read' as const },
+  { path: '/promotions',   label: 'Promociones',         icon: Percent,         permission: 'promo:read'    as const },
+  { path: '/colors',       label: 'Color',               icon: Ticket,          permission: 'coupon:read'   as const },
+  { path: '/coupons',      label: 'Cupones',             icon: Ticket,          permission: 'coupon:read'   as const },
+  { path: '/orders',       label: 'Pedidos',             icon: ShoppingCart,    permission: 'order:read'    as const },
+  { path: '/rma',          label: 'Cambios/Devoluciones',icon: RefreshCw,       permission: 'rma:read'      as const },
+  { path: '/notes',        label: 'Notas',               icon: StickyNote,      permission: 'notes:read'    as const },
+  { path: '/marketplaces', label: 'Marketplaces',        icon: Share2,          permission: 'meta:read'     as const },
+  // 💳 Pagos — permiso correcto: payments:read
+  { path: '/payments',     label: 'Pagos',               icon: CreditCard,      permission: 'payments:read' as const },
+  { path: '/inbox',        label: 'Inbox',               icon: MessageSquare,   permission: 'order:read'    as const },
+  { path: '/coverage',     label: 'Cobertura',           icon: MapPin,          permission: 'coverage:read' as const },
+  { path: '/customers',    label: 'Clientes',            icon: UserCircle,      permission: 'customer:read' as const },
+  {
+    path: '/users', label: 'Usuarios y Roles', icon: Users,
+    anyPermission: ['user:manage', 'role:manage'] as const,
+  },
+  { path: '/audit',        label: 'Auditoría',           icon: FileText,        permission: 'audit:read'    as const },
+  { path: '/settings',     label: 'Configuración',       icon: Settings,        disabled: true, permission: undefined },
 ];
 
 export function SidebarNav() {
   const location = useLocation();
   const { hasPermission, hasAnyPermission } = useAuth();
-console.log('[Sidebar] menuItems count:', menuItems.length, 'permissions check:', menuItems.map(m => m.label + ':' + (m.permission ? hasPermission(m.permission) : 'no-perm')));
+
   return (
     <aside className="hidden lg:flex lg:flex-col w-64 bg-white border-r border-gray-200 h-screen sticky top-0">
       {/* Logo */}
@@ -56,20 +60,16 @@ console.log('[Sidebar] menuItems count:', menuItems.length, 'permissions check:'
       {/* Menu */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
-          // Ocultar si no tiene permiso
-          if (item.permission && !hasPermission(item.permission)) {
-            return null;
-          }
-          
-          // Ocultar si requiere any permission y no tiene ninguno
-          if (item.anyPermission && !hasAnyPermission(item.anyPermission)) {
+          if ('anyPermission' in item && item.anyPermission) {
+            if (!hasAnyPermission(item.anyPermission)) return null;
+          } else if (item.permission && !hasPermission(item.permission)) {
             return null;
           }
 
-          const Icon = item.icon;
+          const Icon     = item.icon;
           const isActive = location.pathname === item.path;
-          
-          if (item.disabled) {
+
+          if ('disabled' in item && item.disabled) {
             return (
               <div
                 key={item.path}
@@ -77,7 +77,9 @@ console.log('[Sidebar] menuItems count:', menuItems.length, 'permissions check:'
               >
                 <Icon className="w-5 h-5" />
                 <span className="text-sm">{item.label}</span>
-                <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Pronto</span>
+                <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
+                  Pronto
+                </span>
               </div>
             );
           }
@@ -88,7 +90,7 @@ console.log('[Sidebar] menuItems count:', menuItems.length, 'permissions check:'
               to={item.path}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
+                  ? 'bg-emerald-50 text-emerald-700 font-medium'
                   : 'text-gray-700 hover:bg-gray-100'
               }`}
             >

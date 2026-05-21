@@ -1,177 +1,209 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { OpenPayConfig, FintocConfig, PaymentMethodConfig, PaymentTransaction, PaymentMethodKey } from '../types/payments';
-import { DEFAULT_PAYMENT_METHODS } from '../types/payments';
+// @refresh reset
+/**
+ * src/app/store/PaymentsContext.tsx
+ * Context de Pagos — incluye paymentConfig (feature flags desde DB).
+ */
+
+import React, {
+  createContext, useContext, useState, useEffect,
+  useCallback, ReactNode,
+} from 'react';
+import type {
+  PaymentGateway, TenantGateway, CreateGatewayPayload,
+  PaymentIntent, IntentFilters, Pagination,
+  PaymentStats, StatsOptions,
+} from '../types/payments';
+import type { PaymentConfig } from '../services/paymentsService';
 import {
-  getOpenPayConfig,
-  saveOpenPayConfig,
-  verifyOpenPayConnection,
-  getFintocConfig,
-  saveFintocConfig as saveFintocConfigService,
-  verifyFintocConnection as verifyFintocConnectionService,
-  getPaymentMethods,
-  updatePaymentMethod,
-  getTransactions,
+  getGateways, getTenantGateways, connectTenantGateway,
+  updateTenantGateway, getIntents, getPaymentStats,
+  getPaymentConfig, updatePaymentConfig,
 } from '../services/paymentsService';
 import { useAudit } from './AuditContext';
-import { useAuth } from './AuthContext';
 
+// ── State ─────────────────────────────────────────────────────────────────────
 interface PaymentsState {
-  config: OpenPayConfig | null;
-  fintocConfig: FintocConfig | null;
-  paymentMethods: PaymentMethodConfig[];
-  transactions: PaymentTransaction[];
-  loading: boolean;
-  verifying: boolean;
-  verifyingFintoc: boolean;
+  gateways:       PaymentGateway[];
+  tenantGateways: TenantGateway[];
+  paymentConfig:  PaymentConfig | null;
+  intents:        PaymentIntent[];
+  pagination:     Pagination | null;
+  stats:          PaymentStats | null;
+  intentsMeta:    { historyDays: number; exportFormat: string | null } | null;
+
+  loading:        boolean;   // carga inicial
+  loadingIntents: boolean;
+  loadingStats:   boolean;
+  statsError:     string | null;
 }
 
+// ── Context value ─────────────────────────────────────────────────────────────
 interface PaymentsContextValue extends PaymentsState {
-  saveConfig: (config: OpenPayConfig) => Promise<void>;
-  saveFintocConfig: (config: FintocConfig) => Promise<void>;
-  verifyConnection: () => Promise<boolean>;
-  verifyFintocConnection: () => Promise<boolean>;
-  togglePaymentMethod: (key: PaymentMethodKey, enabled: boolean) => Promise<void>;
-  refreshTransactions: (filters?: { startDate?: string; endDate?: string; method?: string; status?: string }) => Promise<void>;
-  isConnected: boolean;
-  isFintocConnected: boolean;
+  refreshGateways:    () => Promise<void>;
+  refreshIntents:     (filters?: IntentFilters) => Promise<void>;
+  refreshStats:       (opts?: StatsOptions) => Promise<void>;
+  connectGateway:     (payload: CreateGatewayPayload) => Promise<void>;
+  patchGateway:       (id: string, payload: Partial<TenantGateway>) => Promise<void>;
+  patchConfig:        (flags: Partial<PaymentConfig['flags']>) => Promise<void>;
+  activeFilters:      IntentFilters;
+  setActiveFilters:   (f: IntentFilters) => void;
+  statsPeriod:        StatsOptions['period'];
+  setStatsPeriod:     (p: StatsOptions['period']) => void;
 }
 
 const PaymentsContext = createContext<PaymentsContextValue | null>(null);
-const STORAGE_KEY = 'pochteca_payments';
-const FINTOC_STORAGE_KEY = 'pochteca_fintoc_config';
 
+const INIT_FILTERS: IntentFilters = { page: 1, limit: 20 };
+
+// ── Provider ──────────────────────────────────────────────────────────────────
 export function PaymentsProvider({ children }: { children: ReactNode }) {
   const { auditLog } = useAudit();
-  const { currentUser } = useAuth();
 
   const [state, setState] = useState<PaymentsState>({
-    config: null,
-    fintocConfig: null,
-    paymentMethods: [...DEFAULT_PAYMENT_METHODS],
-    transactions: [],
-    loading: true,
-    verifying: false,
-    verifyingFintoc: false,
+    gateways:       [],
+    tenantGateways: [],
+    paymentConfig:  null,
+    intents:        [],
+    pagination:     null,
+    stats:          null,
+    intentsMeta:    null,
+    loading:        true,
+    loadingIntents: false,
+    loadingStats:   false,
+    statsError:     null,
   });
 
-  useEffect(() => { loadFromStorage(); }, []);
+  const [activeFilters, setActiveFilters] = useState<IntentFilters>(INIT_FILTERS);
+  const [statsPeriod, setStatsPeriod]     = useState<StatsOptions['period']>('month');
 
+  // ── Carga inicial: gateways + tenantGateways + paymentConfig ──────────────
   useEffect(() => {
-    if (!state.loading) saveToStorage();
-  }, [state.config, state.fintocConfig, state.paymentMethods]);
-
-  const loadFromStorage = async () => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const storedFintoc = localStorage.getItem(FINTOC_STORAGE_KEY);
-      const transactions = await getTransactions();
-
-      if (stored) {
-        const data = JSON.parse(stored);
-        const fintocData = storedFintoc ? JSON.parse(storedFintoc) : null;
+    (async () => {
+      try {
+        const [gateways, tenantGateways, paymentConfig] = await Promise.all([
+          getGateways(),
+          getTenantGateways(),
+          getPaymentConfig(),
+        ]);
         setState(prev => ({
           ...prev,
-          config: data.config || null,
-          fintocConfig: fintocData,
-          paymentMethods: data.paymentMethods || [...DEFAULT_PAYMENT_METHODS],
-          transactions,
+          gateways,
+          tenantGateways,
+          paymentConfig,
           loading: false,
         }));
-      } else {
-        const [config, methods] = await Promise.all([getOpenPayConfig(), getPaymentMethods()]);
-        setState({ config, fintocConfig: null, paymentMethods: methods, transactions, loading: false, verifying: false, verifyingFintoc: false });
+      } catch (err) {
+        console.error('[PaymentsContext] Error en carga inicial:', err);
+        setState(prev => ({ ...prev, loading: false }));
       }
-    } catch (error) {
-      console.error('[PaymentsContext] Error cargando datos:', error);
-      setState(prev => ({ ...prev, loading: false }));
-    }
-  };
+    })();
+  }, []);
 
-  const saveToStorage = () => {
+  // ── Refresh gateways ───────────────────────────────────────────────────────
+  const refreshGateways = useCallback(async () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ config: state.config, paymentMethods: state.paymentMethods }));
-      if (state.fintocConfig) localStorage.setItem(FINTOC_STORAGE_KEY, JSON.stringify(state.fintocConfig));
-    } catch (error) {
-      console.error('[PaymentsContext] Error guardando datos:', error);
+      const [gateways, tenantGateways] = await Promise.all([
+        getGateways(),
+        getTenantGateways(),
+      ]);
+      setState(prev => ({ ...prev, gateways, tenantGateways }));
+    } catch (err) {
+      console.error('[PaymentsContext] refreshGateways error:', err);
     }
-  };
+  }, []);
 
-  const saveConfig = async (config: OpenPayConfig) => {
-    const savedConfig = await saveOpenPayConfig(config);
-    setState(prev => ({ ...prev, config: savedConfig }));
-    auditLog({ action: 'PAYMENTS_CONFIG_SAVED', entity: { type: 'payments', id: 'config', label: 'OpenPay Config' }, metadata: { mode: config.mode } });
-  };
-
-  const saveFintocConfig = async (config: FintocConfig) => {
-    const savedConfig = await saveFintocConfigService(config);
-    setState(prev => ({ ...prev, fintocConfig: savedConfig }));
-    auditLog({ action: 'FINTOC_CONFIG_SAVED', entity: { type: 'payments', id: 'fintoc', label: 'Fintoc Config' }, metadata: { mode: config.mode } });
-  };
-
-  const verifyConnection = async (): Promise<boolean> => {
-    if (!state.config) return false;
-    setState(prev => ({ ...prev, verifying: true }));
+  // ── Refresh intents ────────────────────────────────────────────────────────
+  const refreshIntents = useCallback(async (filters?: IntentFilters) => {
+    setState(prev => ({ ...prev, loadingIntents: true }));
     try {
-      const result = await verifyOpenPayConnection(state.config);
+      const result = await getIntents(filters ?? activeFilters);
       setState(prev => ({
         ...prev,
-        config: prev.config ? { ...prev.config, connectionStatus: result.success ? 'CONNECTED' : 'ERROR', errorMessage: result.errorMessage, lastVerifiedAt: new Date().toISOString() } : null,
-        verifying: false,
+        intents:        result.data,
+        pagination:     result.pagination,
+        intentsMeta:    result.meta,
+        loadingIntents: false,
       }));
-      auditLog({ action: 'PAYMENTS_CONNECTION_VERIFIED', entity: { type: 'payments', id: 'config', label: 'OpenPay' }, metadata: { success: result.success } });
-      return result.success;
-    } catch {
-      setState(prev => ({ ...prev, verifying: false }));
-      return false;
+    } catch (err) {
+      console.error('[PaymentsContext] refreshIntents error:', err);
+      setState(prev => ({ ...prev, loadingIntents: false }));
     }
-  };
+  }, [activeFilters]);
 
-  const verifyFintocConnection = async (): Promise<boolean> => {
-    if (!state.fintocConfig) return false;
-    setState(prev => ({ ...prev, verifyingFintoc: true }));
+  // ── Refresh stats ──────────────────────────────────────────────────────────
+  const refreshStats = useCallback(async (opts?: StatsOptions) => {
+    setState(prev => ({ ...prev, loadingStats: true, statsError: null }));
     try {
-      const result = await verifyFintocConnectionService(state.fintocConfig);
-      setState(prev => ({
-        ...prev,
-        fintocConfig: prev.fintocConfig ? { ...prev.fintocConfig, connectionStatus: result.success ? 'CONNECTED' : 'ERROR', errorMessage: result.errorMessage, lastVerifiedAt: new Date().toISOString() } : null,
-        verifyingFintoc: false,
-      }));
-      auditLog({ action: 'FINTOC_CONNECTION_VERIFIED', entity: { type: 'payments', id: 'fintoc', label: 'Fintoc' }, metadata: { success: result.success } });
-      return result.success;
-    } catch {
-      setState(prev => ({ ...prev, verifyingFintoc: false }));
-      return false;
+      const stats = await getPaymentStats(opts ?? { period: statsPeriod });
+      setState(prev => ({ ...prev, stats, loadingStats: false }));
+    } catch (err: any) {
+      const msg = err?.message ?? 'Error al cargar estadísticas';
+      setState(prev => ({ ...prev, stats: null, loadingStats: false, statsError: msg }));
     }
-  };
+  }, [statsPeriod]);
 
-  const togglePaymentMethod = async (key: PaymentMethodKey, enabled: boolean) => {
-    await updatePaymentMethod(key, { isEnabled: enabled });
-    setState(prev => ({ ...prev, paymentMethods: prev.paymentMethods.map(m => m.key === key ? { ...m, isEnabled: enabled } : m) }));
-    auditLog({ action: enabled ? 'PAYMENTS_METHOD_ENABLED' : 'PAYMENTS_METHOD_DISABLED', entity: { type: 'payments', id: key, label: key } });
-  };
+  // ── Connect gateway ────────────────────────────────────────────────────────
+  const connectGateway = useCallback(async (payload: CreateGatewayPayload) => {
+    const gw = await connectTenantGateway(payload);
+    setState(prev => ({
+      ...prev,
+      tenantGateways: [...prev.tenantGateways, gw],
+    }));
+    auditLog({
+      action: 'PAYMENTS_GATEWAY_CONNECTED',
+      entity: { type: 'payment_gateway', id: gw.id, label: gw.provider },
+      metadata: { mode: payload.mode, paymentMethodId: payload.paymentMethodId },
+    });
+  }, [auditLog]);
 
-  const refreshTransactions = async (filters?: { startDate?: string; endDate?: string; method?: string; status?: string }) => {
-    const transactions = await getTransactions(filters);
-    setState(prev => ({ ...prev, transactions }));
-  };
+  // ── Patch gateway ──────────────────────────────────────────────────────────
+  const patchGateway = useCallback(async (id: string, payload: Partial<TenantGateway>) => {
+    const updated = await updateTenantGateway(id, payload);
+    setState(prev => ({
+      ...prev,
+      tenantGateways: prev.tenantGateways.map(g => g.id === id ? updated : g),
+    }));
+    auditLog({
+      action: 'PAYMENTS_GATEWAY_UPDATED',
+      entity: { type: 'payment_gateway', id, label: updated.provider },
+      metadata: { fields: Object.keys(payload) },
+    });
+  }, [auditLog]);
+
+  // ── Patch config (flags) ───────────────────────────────────────────────────
+  const patchConfig = useCallback(async (flags: Partial<PaymentConfig['flags']>) => {
+    const updated = await updatePaymentConfig(flags);
+    setState(prev => ({ ...prev, paymentConfig: updated }));
+    auditLog({
+      action: 'PAYMENTS_CONFIG_FLAGS_UPDATED',
+      entity: { type: 'payment_config', id: 'flags', label: 'Payment Flags' },
+      metadata: { updatedFlags: Object.keys(flags) },
+    });
+  }, [auditLog]);
 
   const value: PaymentsContextValue = {
     ...state,
-    saveConfig,
-    saveFintocConfig,
-    verifyConnection,
-    verifyFintocConnection,
-    togglePaymentMethod,
-    refreshTransactions,
-    isConnected: state.config?.connectionStatus === 'CONNECTED',
-    isFintocConnected: state.fintocConfig?.connectionStatus === 'CONNECTED',
+    refreshGateways,
+    refreshIntents,
+    refreshStats,
+    connectGateway,
+    patchGateway,
+    patchConfig,
+    activeFilters,
+    setActiveFilters,
+    statsPeriod,
+    setStatsPeriod,
   };
 
-  return <PaymentsContext.Provider value={value}>{children}</PaymentsContext.Provider>;
+  return (
+    <PaymentsContext.Provider value={value}>
+      {children}
+    </PaymentsContext.Provider>
+  );
 }
 
 export function usePayments() {
-  const context = useContext(PaymentsContext);
-  if (!context) throw new Error('usePayments must be used within PaymentsProvider');
-  return context;
+  const ctx = useContext(PaymentsContext);
+  if (!ctx) throw new Error('usePayments must be used within PaymentsProvider');
+  return ctx;
 }

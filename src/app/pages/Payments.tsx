@@ -1,958 +1,1156 @@
-import React, { useState, useEffect } from 'react';
-import { CreditCard, CheckCircle, XCircle, AlertCircle, Loader2, Eye, EyeOff, Save, ExternalLink, Download, Building2, Store, Banknote, Lock } from 'lucide-react';
-import { Link } from 'react-router';
-import { DevToggle } from '../components/DevToggle';
-import { usePayments } from '../store/PaymentsContext';
-import { useApp } from '../store/AppContext';
-import { useAuth } from '../store/AuthContext';
-import { useToast } from '../store/ToastContext';
-import type { OpenPayConfig, FintocConfig, OpenPayMode, FintocMode, PaymentMethodKey, PaymentTransaction } from '../types/payments';
+/**
+ * src/app/pages/Payments.tsx
+ * Módulo de Pagos — versión final.
+ * Diseño Figma · usePaymentFlags desde DB · Onboarding con patchConfig.
+ */
+import { saveDepositAccount, getDepositAccount } from '../services/paymentsService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  OPENPAY_MODE_LABELS,
-  FINTOC_MODE_LABELS,
-  CONNECTION_STATUS_LABELS,
-  CONNECTION_STATUS_COLORS,
-  PAYMENT_METHOD_LABELS,
-  TRANSACTION_STATUS_LABELS,
-  TRANSACTION_STATUS_COLORS,
-  PROCESSOR_LABELS,
-  PROCESSOR_COLORS,
+  Settings2, CreditCard, Clock, ChevronDown, ChevronUp,
+  CheckCircle, Lock, AlertTriangle, Info,
+  Download, RefreshCw, Eye, EyeOff, Loader2,
+  ArrowRight, Calendar, X,
+  TrendingUp, Banknote, Building2, Store, Truck,
+} from 'lucide-react';
+import { usePayments }      from '../store/PaymentsContext';
+import { useAuth }          from '../store/AuthContext';
+import { useToast }         from '../store/ToastContext';
+import { useAudit }         from '../store/AuditContext';
+import { exportIntentsCSV } from '../services/paymentsService';
+import type { IntentStatus, TenantGateway } from '../types/payments';
+import {
+  INTENT_STATUS_LABEL, INTENT_STATUS_COLOR,
+  CLABE_BANKS, PLAN_LABEL, PLAN_TRUST_LEVEL,
 } from '../types/payments';
-import { exportToCSV } from '../utils/csvExport';
 
-type TabKey = 'config' | 'methods' | 'transactions';
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmt = (n: number) =>
+  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(n);
+const fmtFull = (n: number) =>
+  new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(n);
+const fmtShort = (s: string | null) =>
+  s ? new Date(s).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—';
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'config', label: 'Configuración' },
-  { key: 'methods', label: 'Métodos de Pago' },
-  { key: 'transactions', label: 'Historial' },
-];
+// ── usePaymentFlags — lee paymentConfig desde el contexto (DB) ────────────────
+function usePaymentFlags() {
+  const { paymentConfig, tenantGateways } = usePayments();
 
-// Íconos por método de pago
-const PAYMENT_METHOD_ICONS: Record<PaymentMethodKey, React.ElementType> = {
-  CARD: CreditCard,
-  SPEI: Building2,
-  OXXO: Store,
-  FINTOC_SPEI: Banknote,
-};
-
-export function Payments() {
-  const { 
-    config, 
-    fintocConfig,
-    paymentMethods, 
-    transactions, 
-    loading, 
-    verifying,
-    verifyingFintoc,
-    saveConfig,
-    saveFintocConfig,
-    verifyConnection,
-    verifyFintocConnection,
-    togglePaymentMethod,
-    refreshTransactions,
-    isConnected,
-    isFintocConnected,
-  } = usePayments();
-  
-  const { payments: appPayments } = useApp();
-  const { hasPermission } = useAuth();
-  const { showToast } = useToast();
-
-  const [activeTab, setActiveTab] = useState<TabKey>('config');
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
-  const [showFintocSecretKey, setShowFintocSecretKey] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSavingFintoc, setIsSavingFintoc] = useState(false);
-
-  // Permisos
-  const canConfigure = hasPermission('payments:configure');
-  const canRead = hasPermission('payments:read');
-
-  // Form state para OpenPay
-  const [formData, setFormData] = useState<OpenPayConfig>({
-    merchantId: '',
-    publicKey: '',
-    privateKey: '',
-    mode: 'SANDBOX',
-    connectionStatus: 'DISCONNECTED',
-  });
-
-  // Form state para Fintoc
-  const [fintocFormData, setFintocFormData] = useState<FintocConfig>({
-    mode: 'sandbox',
-    secretKey: '',
-    publicKey: '',
-    connectionStatus: 'DISCONNECTED',
-  });
-
-  // Cargar config cuando esté disponible
-  useEffect(() => {
-    if (config) {
-      setFormData(config);
-    }
-  }, [config]);
-
-  useEffect(() => {
-    if (fintocConfig) {
-      setFintocFormData(fintocConfig);
-    }
-  }, [fintocConfig]);
-
-  // Cargar transacciones al montar
-  useEffect(() => {
-    refreshTransactions();
-  }, []);
-
-  // Filtros para transacciones
-  const [filters, setFilters] = useState({
-    processor: '',
-    method: '',
-    status: '',
-    startDate: '',
-    endDate: '',
-  });
-
-  const handleChange = (field: keyof OpenPayConfig, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleFintocChange = (field: keyof FintocConfig, value: any) => {
-    setFintocFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSaveConfig = async () => {
-    if (!canConfigure) {
-      showToast('No tienes permiso para configurar métodos de pago', 'error');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await saveConfig(formData);
-      showToast('Configuración de OpenPay guardada exitosamente', 'success');
-    } catch (error) {
-      showToast('Error al guardar la configuración', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveFintocConfig = async () => {
-    if (!canConfigure) {
-      showToast('No tienes permiso para configurar métodos de pago', 'error');
-      return;
-    }
-
-    setIsSavingFintoc(true);
-    try {
-      await saveFintocConfig(fintocFormData);
-      showToast('Configuración de Fintoc guardada exitosamente', 'success');
-    } catch (error) {
-      showToast('Error al guardar la configuración de Fintoc', 'error');
-    } finally {
-      setIsSavingFintoc(false);
-    }
-  };
-
-  const handleVerifyConnection = async () => {
-    const success = await verifyConnection();
-    if (success) {
-      showToast('Conexión con OpenPay verificada exitosamente', 'success');
-    } else {
-      showToast('Error al verificar la conexión con OpenPay', 'error');
-    }
-  };
-
-  const handleVerifyFintocConnection = async () => {
-    const success = await verifyFintocConnection();
-    if (success) {
-      showToast('Conexión con Fintoc verificada exitosamente', 'success');
-    } else {
-      showToast('Error al verificar la conexión con Fintoc', 'error');
-    }
-  };
-
-  const handleToggleMethod = async (key: PaymentMethodKey, enabled: boolean) => {
-    // Validar según el método
-    if (key === 'FINTOC_SPEI') {
-      if (!appPayments.fintoc.enabled) {
-        showToast('Fintoc no está habilitado en tu plan', 'warning');
-        return;
-      }
-      if (!appPayments.fintoc.isConfigured) {
-        showToast('Configura tus credenciales de Fintoc primero', 'warning');
-        return;
-      }
-    } else {
-      if (!isConnected) {
-        showToast('Conecta tu cuenta de OpenPay primero', 'warning');
-        return;
-      }
-    }
-
-    try {
-      await togglePaymentMethod(key, enabled);
-      showToast(
-        `Método ${PAYMENT_METHOD_LABELS[key]} ${enabled ? 'habilitado' : 'deshabilitado'}`,
-        'success'
-      );
-    } catch (error) {
-      showToast('Error al actualizar el método de pago', 'error');
-    }
-  };
-
-  const handleExportTransactions = () => {
-    const data = filteredTransactions.map(t => ({
-      'ID Transacción': t.processorTransactionId,
-      'Procesador': t.processor,
-      'Fecha': new Date(t.createdAt).toLocaleString('es-MX'),
-      'Pedido': t.orderNumber || '-',
-      'Monto': `$${t.amount.toFixed(2)} ${t.currency}`,
-      'Método': PAYMENT_METHOD_LABELS[t.method],
-      'Estado': TRANSACTION_STATUS_LABELS[t.status],
-      'Descripción': t.description || '-',
+  // Alerts en tiempo real desde el status de tenantGateways
+  const alerts = tenantGateways
+    .filter(g => g.status === 'error')
+    .map(g => ({
+      id:       g.id,
+      provider: g.provider,
+      message:  `${g.provider} tiene un error de autenticación — tus ventas están pausadas.`,
     }));
 
-    exportToCSV(data, 'transacciones-pagos');
-    showToast('Exportación completada', 'success');
+  const flags = paymentConfig?.flags;
+
+  return {
+    showOwnGateways:  flags?.showOwnGateways  ?? false,
+    showMpOwnAccount: flags?.showOwnGateways  ?? false,
+    showStats:        flags?.showStats        ?? false,
+    canExportCsv:     flags?.canExportCsv     ?? false,
+    canExportPdf:     flags?.canExportPdf     ?? false,
+    showTrustMeter:   flags?.showTrustMeter   ?? true,
+    trustLevel:      (flags?.trustLevel       ?? 1) as 1 | 2 | 3,
+    nextDeposit:      flags?.nextDeposit      ?? null,
+    planId:           paymentConfig?.planId   ?? 'free',
+    alerts,
   };
+}
 
-  // Aplicar filtros a transacciones
-  const filteredTransactions = transactions.filter(t => {
-    if (filters.processor && t.processor !== filters.processor) return false;
-    if (filters.method && t.method !== filters.method) return false;
-    if (filters.status && t.status !== filters.status) return false;
-    if (filters.startDate && new Date(t.createdAt) < new Date(filters.startDate)) return false;
-    if (filters.endDate && new Date(t.createdAt) > new Date(filters.endDate)) return false;
-    return true;
-  });
+// ── Onboarding Modal ──────────────────────────────────────────────────────────
+// Fallback key para evitar re-mostrar si la llamada al API falla
+const OB_FALLBACK_KEY = 'xokly_payments_ob_done';
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-MX', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+function OnboardingModal({
+  onClose,
+  onComplete,
+}: {
+  onClose:    () => void;
+  onComplete: () => Promise<void>;
+}) {
+  const [step,   setStep]   = useState(1);
+  const [clabe,  setClabe]  = useState('');
+  const [holder, setHolder] = useState('');
+  const { showToast } = useToast();
+
+  const bank     = CLABE_BANKS[clabe.substring(0, 3)] || '';
+  const canNext2 = clabe.length === 18 && holder.trim().length > 2;
+  const progressW = step === 1 ? 'w-1/3' : step === 2 ? 'w-2/3' : 'w-full';
+
+  const finish = async () => {
+    localStorage.setItem(OB_FALLBACK_KEY, '1'); // fallback local
+    try {
+      await onComplete(); // → patchConfig({ showOnboarding: false })
+    } catch {
+      // no bloqueante — el usuario ya completó el wizard
+    }
+    onClose();
+    showToast('¡Cuenta configurada! Ya puedes recibir pagos.', 'success');
   };
-
-  if (loading) {
-return (
-  <div className="flex items-center justify-center h-64">
-    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-  </div>
-);
-  }
 
   return (
-    <>
- <div className="space-y-6">
-        {/* Tabs */}
-        <div className="border-b border-gray-200 mb-6">
-          <nav className="flex gap-8">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`pb-3 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.key
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.label}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+
+        {/* Progress bar */}
+        <div className="h-1.5 bg-gray-200">
+          <div className={`h-full bg-[#0A3D2B] rounded-full transition-all duration-500 ${progressW}`} />
+        </div>
+        <p className="text-center text-xs text-gray-500 pt-3">Paso {step} de 3</p>
+
+        {/* ── Paso 1: Bienvenida ── */}
+        {step === 1 && (
+          <div className="px-8 pb-8 pt-4 text-center">
+            <div className="flex justify-center items-center gap-4 mb-8">
+              {[
+                { icon: CreditCard, bg: 'bg-blue-100',    label: 'Cliente paga'     },
+                { icon: Store,      bg: 'bg-gray-100',    label: 'Xokly verifica'   },
+                { icon: Banknote,   bg: 'bg-emerald-100', label: 'Tú recibes'       },
+              ].map(({ icon: Icon, bg, label }, i) => (
+                <React.Fragment key={label}>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={`w-14 h-14 ${bg} rounded-2xl flex items-center justify-center`}>
+                      <Icon className="w-7 h-7 text-gray-700" />
+                    </div>
+                    <span className="text-xs font-medium text-gray-700">{label}</span>
+                  </div>
+                  {i < 2 && <ChevronRight className="w-4 h-4 text-gray-400 mt-3 flex-shrink-0" />}
+                </React.Fragment>
+              ))}
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              Tu tienda ya puede recibir pagos 🎉
+            </h2>
+            <p className="text-gray-500 text-sm leading-relaxed mb-8">
+              Xokly gestiona Mercado Pago por ti para que puedas vender desde hoy con total seguridad.
+            </p>
+
+            <div className="grid grid-cols-3 gap-3 mb-8">
+              {[
+                { emoji: '💳', label: 'Tarjeta de crédito o débito' },
+                { emoji: '🏪', label: 'Pago en OXXO'               },
+                { emoji: '🏛️', label: 'Transferencia SPEI'          },
+              ].map(({ emoji, label }) => (
+                <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+                  <span className="text-2xl block mb-1">{emoji}</span>
+                  <span className="text-xs text-gray-700 font-medium leading-tight block">{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setStep(2)}
+              className="w-full bg-[#0A3D2B] hover:bg-[#0d4f38] text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 text-base transition-colors"
+            >
+              Configurar mi cuenta <ArrowRight className="w-4 h-4" />
+            </button>
+            <p className="text-xs text-gray-400 mt-3">
+              Necesitamos una CLABE para depositarte tus ganancias
+            </p>
+          </div>
+        )}
+
+        {/* ── Paso 2: CLABE ── */}
+        {step === 2 && (
+          <div className="px-8 pb-8 pt-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Tu cuenta de depósito</h2>
+            <p className="text-sm text-gray-500 mb-6">Aquí recibirás tus ganancias cada martes.</p>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CLABE Interbancaria</label>
+                  <input
+                    type="text" inputMode="numeric" maxLength={18}
+                    value={clabe}
+                    onChange={e => setClabe(e.target.value.replace(/\D/g, '').slice(0, 18))}
+                    placeholder="18 dígitos"
+                    className={`w-full px-3 py-2.5 rounded-lg border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+                      clabe.length === 18 ? 'border-emerald-400' : clabe.length > 0 ? 'border-amber-400' : 'border-gray-300'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Banco</label>
+                  <input
+                    type="text" readOnly
+                    value={bank || (clabe.length >= 3 ? 'No identificado' : '')}
+                    placeholder="Auto-detectado"
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-600 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Nombre del Titular</label>
+                <input
+                  type="text" value={holder}
+                  onChange={e => setHolder(e.target.value)}
+                  placeholder="Igual que en tu banco"
+                  className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <p className="text-xs text-gray-400 mt-1">Debe coincidir exactamente con el nombre registrado en tu banco.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setStep(1)} className="flex-none px-5 py-3 rounded-xl border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                ← Atrás
               </button>
-            ))}
-          </nav>
+              <button
+                onClick={() => setStep(3)} disabled={!canNext2}
+                className="flex-1 bg-[#0A3D2B] hover:bg-[#0d4f38] disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
+              >
+                Guardar y continuar →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Paso 3: Listo ── */}
+        {step === 3 && (
+          <div className="px-8 pb-8 pt-4 text-center">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
+              <CheckCircle className="w-8 h-8 text-emerald-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">¡Todo listo!</h2>
+            <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+              Tu tienda está activa y lista para recibir pagos. Recibirás tus ganancias cada martes.
+            </p>
+            <button
+              onClick={finish}
+              className="w-full bg-[#0A3D2B] hover:bg-[#0d4f38] text-white font-semibold py-4 rounded-xl transition-colors"
+            >
+              Ir a mi dashboard de pagos
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Alert Banners ─────────────────────────────────────────────────────────────
+function AlertBanner({
+  alerts,
+  onDismiss,
+}: {
+  alerts:    { id: string; provider: string; message: string }[];
+  onDismiss: (id: string) => void;
+}) {
+  if (alerts.length === 0) return null;
+  return (
+    <>
+      {alerts.map(a => (
+        <div key={a.id} className="bg-red-600 text-white px-5 py-3 flex items-center gap-3 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1">{a.message}</span>
+          <button className="underline font-medium text-white hover:text-red-200 transition-colors whitespace-nowrap">
+            Ver en historial →
+          </button>
+          <button onClick={() => onDismiss(a.id)} className="ml-2 text-red-200 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
+// ── MP Xokly Card ─────────────────────────────────────────────────────────────
+function MPXoklyCard() {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-[#00B1EA] rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">MP</div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-gray-900">Mercado Pago</h3>
+              <span className="flex items-center gap-1 text-xs border border-emerald-500 text-emerald-600 px-2 py-0.5 rounded-full font-medium">
+                <CheckCircle className="w-3 h-3" /> Incluido en tu plan
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+              Acepta tarjetas, OXXO y transferencias. El pago lo recibe Xokly y te lo deposita una vez confirmada la entrega.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-600 flex-shrink-0 ml-4">
+          Activo <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Deposit Account Form ──────────────────────────────────────────────────────
+function DepositAccountForm() {
+  const flags = usePaymentFlags();
+  const { showToast } = useToast();
+
+  const [clabe,   setClabe]   = useState('');
+  const [holder,  setHolder]  = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const [account, setAccount] = useState<DepositAccountResponse | null>(null);
+
+  const bank    = CLABE_BANKS[clabe.substring(0, 3)] || '';
+  const canSave = clabe.length === 18 && holder.trim().length > 2;
+
+  // Cargar estado actual de la cuenta al montar
+  useEffect(() => {
+    getDepositAccount()
+      .then(data => {
+        setAccount(data);
+        if (data.clabe) {
+          // Mostrar la CLABE enmascarada que ya existe
+          setHolder(data.holder || '');
+        }
+      })
+      .catch(() => {}); // silencioso si falla
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const result = await saveDepositAccount(clabe, holder);
+      setAccount(result);
+      setClabe('');
+      showToast(result.message || 'Cuenta guardada', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Error al guardar la cuenta', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center gap-2 mb-5">
+        <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+          <Building2 className="w-4 h-4 text-gray-500" />
+        </div>
+        <h3 className="font-semibold text-gray-900">Tu cuenta de depósito</h3>
+        {account?.status === 'active' && (
+          <span className="ml-auto flex items-center gap-1 text-xs text-emerald-600 font-medium">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full" /> Activa
+          </span>
+        )}
+        {account?.status === 'not_configured' && (
+          <span className="ml-auto text-xs text-amber-600 font-medium">Sin configurar</span>
+        )}
+        {account?.status === 'pending_48h' && (
+          <span className="ml-auto text-xs text-blue-600 font-medium">Cambio pendiente (48h)</span>
+        )}
+      </div>
+
+      {/* CLABE activa actual */}
+      {account?.clabe && (
+        <div className="mb-4 bg-gray-50 rounded-lg px-4 py-3 flex items-center justify-between text-sm">
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">CLABE activa</p>
+            <p className="font-mono font-medium text-gray-800">{account.clabe}</p>
+          </div>
+          <span className="text-xs text-gray-500">{account.bank}</span>
+        </div>
+      )}
+
+      {/* Banner cambio pendiente */}
+      {account?.status === 'pending_48h' && account.pending && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+          <p className="font-medium mb-0.5">Cambio en proceso</p>
+          <p>Nueva CLABE: <span className="font-mono">{account.pending}</span></p>
+          <p className="text-xs mt-1 text-blue-500">
+            Se activará el {account.holdsUntil ? new Date(account.holdsUntil).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '—'}
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-5 gap-3">
+          <div className="col-span-3">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+              {account?.clabe ? 'Nueva CLABE' : 'CLABE Interbancaria'}
+            </label>
+            <input
+              type="text" inputMode="numeric" maxLength={18}
+              value={clabe}
+              onChange={e => setClabe(e.target.value.replace(/\D/g, '').slice(0, 18))}
+              placeholder="722... (18 dígitos)"
+              className={`w-full px-3 py-2.5 rounded-lg border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+                clabe.length === 18 ? 'border-emerald-400' : clabe.length > 0 ? 'border-amber-400' : 'border-gray-300'
+              }`}
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Banco</label>
+            <input
+              type="text" readOnly
+              value={bank || (clabe.length >= 3 ? 'No encontrado' : '')}
+              placeholder="Auto-detectado"
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-600 cursor-not-allowed"
+            />
+          </div>
         </div>
 
-        {/* Tab 1: Configuración */}
-        {activeTab === 'config' && (
-          <div className="space-y-8">
-            {/* SECCIÓN OPENPAY - No tocar */}
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">OpenPay</h3>
-                <p className="text-sm text-gray-600">Configuración del procesador de pagos OpenPay</p>
-              </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Nombre del Titular</label>
+          <input
+            type="text" value={holder}
+            onChange={e => setHolder(e.target.value)}
+            placeholder="Igual que en tu cuenta de MP"
+            className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white focus:border-transparent"
+          />
+          <p className="text-xs text-gray-400 mt-1.5">Debe coincidir exactamente con el nombre registrado en tu banco.</p>
+        </div>
+      </div>
 
-              {/* Banner informativo OpenPay */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">¿Dónde encuentro mis credenciales?</p>
-                    <p className="mb-2">
-                      Inicia sesión en tu{' '}
-                      <a
-                        href="https://dashboard.openpay.mx"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-blue-900"
-                      >
-                        Dashboard de OpenPay →
-                      </a>{' '}
-                      y ve a Configuración → Credenciales.
-                    </p>
-                    <p className="text-xs text-blue-700">
-                      Asegúrate de usar las credenciales correctas según el modo (Sandbox o Producción).
-                    </p>
+      <div className="flex items-center justify-between mt-5 gap-4 flex-wrap">
+        {flags.nextDeposit ? (
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm">
+            <Calendar className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span className="text-amber-700">
+              <span className="font-semibold">Próximo depósito:</span>{' '}
+              {new Date(flags.nextDeposit.date).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {' · '}
+              <span className="font-semibold text-amber-800">{fmtFull(flags.nextDeposit.amount)} {flags.nextDeposit.currency}</span> estimados
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-500">
+            <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            Depósitos cada martes
+          </div>
+        )}
+        <button
+          onClick={handleSave} disabled={!canSave || saving}
+          className="flex items-center gap-2 bg-[#0A3D2B] hover:bg-[#0d4f38] disabled:opacity-50 text-white text-sm font-medium py-2.5 px-5 rounded-xl transition-colors flex-shrink-0"
+        >
+          {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</> : <><Banknote className="w-4 h-4" /> Guardar cuenta</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Processor Cards ───────────────────────────────────────────────────────────
+type ProcessorDef = {
+  key: string; name: string; subtitle: string; description: string;
+  avatar: string; avatarBg: string; inputLabel?: string; inputPlaceholder?: string;
+};
+
+const PROCESSORS: ProcessorDef[] = [
+  { key: 'mercadopago', name: 'Mercado Pago', subtitle: '— tu propia cuenta',
+    description: 'El dinero de tus ventas va directo a tu cuenta de Mercado Pago. Retira cuando quieras.',
+    avatar: 'MP', avatarBg: 'bg-[#00B1EA]' },
+  { key: 'openpay', name: 'OpenPay', subtitle: '',
+    description: 'Acepta tarjetas y transferencias SPEI. Depósito semanal a tu CLABE registrada.',
+    avatar: 'OP', avatarBg: 'bg-purple-600',
+    inputLabel: 'MERCHANT ID DE OPENPAY', inputPlaceholder: 'm...' },
+  { key: 'fintoc', name: 'Fintoc', subtitle: '— Pago por transferencia SPEI',
+    description: 'Tus compradores pagan directo desde su banco. Sin tarjeta, sin comisión de efectivo.',
+    avatar: 'Fi', avatarBg: 'bg-[#0A3D2B]',
+    inputLabel: 'API KEY DE FINTOC', inputPlaceholder: 'pk_live_...' },
+];
+
+function ProcessorCard({ proc, currentTrustLevel, tenantGateway }: {
+  proc: ProcessorDef; currentTrustLevel: number; tenantGateway?: TenantGateway;
+}) {
+  const [apiKey,  setApiKey]  = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const { showToast } = useToast();
+
+  const isLocked    = currentTrustLevel < 2;
+  const isConnected = tenantGateway?.status === 'connected';
+  const isError     = tenantGateway?.status === 'error';
+
+  const handleSave = async () => {
+    if (!apiKey.trim()) return;
+    setSaving(true);
+    try {
+      await new Promise(r => setTimeout(r, 900)); // TODO: POST /tenant-gateways
+      showToast(`${proc.name} conectado`, 'success');
+    } catch {
+      showToast(`Error al conectar ${proc.name}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className={`bg-white rounded-xl border p-5 ${isError ? 'border-red-200' : 'border-gray-200'}`}>
+      <div className="flex items-start gap-4">
+        <div className={`w-10 h-10 ${proc.avatarBg} rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
+          {proc.avatar}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-gray-900">{proc.name}</span>
+            {proc.subtitle && <span className="text-gray-500 text-sm">{proc.subtitle}</span>}
+            {isLocked    && <span className="text-xs bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">Requiere verificación</span>}
+            {isConnected && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Conectado</span>}
+            {isError     && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Error</span>}
+          </div>
+          <p className="text-sm text-gray-500 mt-1 leading-relaxed">{proc.description}</p>
+        </div>
+      </div>
+
+      {/* Locked */}
+      {isLocked && (
+        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="w-6 h-6 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Lock className="w-3.5 h-3.5 text-amber-600" />
+            </div>
+            Verifica tu identidad para conectar este procesador
+          </div>
+          <button className="text-sm text-[#0A3D2B] font-medium hover:underline flex items-center gap-1 flex-shrink-0">
+            ¿Cómo desbloquear? <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Connected */}
+      {isConnected && (
+        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-emerald-600">
+            <CheckCircle className="w-4 h-4" /> Credenciales verificadas
+          </div>
+          <button className="text-sm text-red-500 hover:text-red-700 font-medium transition-colors">Desconectar</button>
+        </div>
+      )}
+
+      {/* API key input */}
+      {!isLocked && !isConnected && proc.inputLabel && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{proc.inputLabel}</label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                placeholder={proc.inputPlaceholder}
+                className="w-full px-3 py-2.5 pr-10 rounded-xl border border-gray-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+              <button type="button" onClick={() => setShowKey(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <button
+              onClick={handleSave} disabled={!apiKey.trim() || saving}
+              className="flex items-center gap-1.5 bg-[#0A3D2B] hover:bg-[#0d4f38] disabled:opacity-50 text-white text-sm font-medium py-2.5 px-4 rounded-xl transition-colors flex-shrink-0"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              Verificar y guardar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Trust Level Accordion ─────────────────────────────────────────────────────
+const TRUST_LEVELS = [
+  {
+    level: 1, icon: '🌱', title: 'Nuevo vendedor',
+    unlocks: ['Mercado Pago gestionado por Xokly', 'Contra entrega', 'OXXO Pay'],
+    reqs: [],
+  },
+  {
+    level: 2, icon: '🌿', title: 'Vendedor activo',
+    unlocks: ['OpenPay — tarjetas y SPEI', 'Métodos de transferencia SPEI', 'Acceso a métricas avanzadas'],
+    reqs: [
+      { label: '10 ventas completadas', progress: 7, required: 10, done: false },
+      { label: 'Sin disputas en los últimos 60 días', done: true },
+    ],
+  },
+  {
+    level: 3, icon: '🏆', title: 'Vendedor verificado',
+    unlocks: ['OpenPay · Fintoc · Export PDF', 'Reportes avanzados', 'Depósito acelerado'],
+    reqs: [
+      { label: 'Nivel 2 completado', done: false },
+      { label: 'Verificación de identidad (INE)', done: false },
+    ],
+  },
+];
+
+function TrustLevelSection({ trustLevel }: { trustLevel: 1 | 2 | 3 }) {
+  const [expanded, setExpanded] = useState<number | null>(trustLevel < 3 ? trustLevel + 1 : null);
+
+  return (
+    <div>
+      <div className="border-l-4 border-purple-500 pl-4 mb-4">
+        <h2 className="text-base font-semibold text-gray-900">Tu nivel de confianza</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Entre más vendas con Xokly, más opciones de pago desbloqueas y mejores condiciones obtienes.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900">Tu nivel de confianza</h3>
+              <button className="text-gray-400 hover:text-gray-600"><Info className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mt-0.5">Completa los requisitos para acceder a más métodos de pago</p>
+          </div>
+          <span className="flex items-center gap-1 text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full flex-shrink-0">
+            {TRUST_LEVELS.find(l => l.level === trustLevel)?.icon} Nivel {trustLevel} — {TRUST_LEVELS.find(l => l.level === trustLevel)?.title}
+          </span>
+        </div>
+
+        {/* Stepper */}
+        <div className="flex items-center mb-6">
+          {TRUST_LEVELS.map((lvl, idx) => {
+            const done   = trustLevel > lvl.level;
+            const active = trustLevel === lvl.level;
+            return (
+              <React.Fragment key={lvl.level}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center font-semibold text-sm transition-colors ${
+                    done   ? 'bg-[#0A3D2B] border-[#0A3D2B] text-white' :
+                    active ? 'bg-white border-[#0A3D2B] text-[#0A3D2B]' :
+                             'bg-white border-gray-300 text-gray-400'
+                  }`}>
+                    {done ? <CheckCircle className="w-5 h-5" /> : lvl.level}
                   </div>
+                  <span className={`text-xs text-center leading-tight ${active ? 'text-[#0A3D2B] font-semibold' : 'text-gray-400'}`}>
+                    {lvl.title}
+                  </span>
+                  {active && <span className="text-xs text-[#0A3D2B] font-medium">▲ Estás aquí</span>}
                 </div>
-              </div>
+                {idx < TRUST_LEVELS.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-2 mb-6 ${trustLevel > lvl.level ? 'bg-[#0A3D2B]' : 'bg-gray-200'}`} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
 
-              {/* Formulario OpenPay */}
-              <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-                <div className="space-y-4">
-                  {/* Merchant ID */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Merchant ID <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.merchantId}
-                      onChange={(e) => handleChange('merchantId', e.target.value)}
-                      disabled={!canConfigure}
-                      placeholder="mptdggroeidqeioetdlu"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
-                    />
+        {/* Accordion */}
+        <div className="space-y-2">
+          {TRUST_LEVELS.map(lvl => {
+            const isCurrent = lvl.level === trustLevel;
+            const isLocked  = lvl.level > trustLevel;
+            const isOpen    = expanded === lvl.level || isCurrent;
+
+            return (
+              <div key={lvl.level} className={`rounded-xl border transition-colors ${isCurrent ? 'border-emerald-200 bg-emerald-50/30' : 'border-gray-200 bg-white'}`}>
+                <button
+                  onClick={() => setExpanded(prev => prev === lvl.level ? null : lvl.level)}
+                  className="w-full flex items-center justify-between px-4 py-3.5 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">{lvl.icon}</span>
+                    <span className={`font-medium text-sm ${isLocked ? 'text-gray-500' : 'text-gray-900'}`}>
+                      Nivel {lvl.level} — {lvl.title}
+                    </span>
+                    {isCurrent && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Estás aquí</span>}
+                    {isLocked  && <span className="flex items-center gap-1 text-xs text-gray-500"><Lock className="w-3.5 h-3.5" /> Bloqueado</span>}
                   </div>
+                  {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
 
-                  {/* Public Key */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      API Key Pública <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.publicKey}
-                      onChange={(e) => handleChange('publicKey', e.target.value)}
-                      disabled={!canConfigure}
-                      placeholder="pk_test_3a1b2c3d4e5f6g7h"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
-                    />
-                  </div>
-
-                  {/* Private Key */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      API Key Privada <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPrivateKey ? 'text' : 'password'}
-                        value={formData.privateKey}
-                        onChange={(e) => handleChange('privateKey', e.target.value)}
-                        disabled={!canConfigure}
-                        placeholder="sk_test_************************"
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPrivateKey(!showPrivateKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Esta clave se guarda de forma segura y solo se muestra enmascarada
-                    </p>
-                  </div>
-
-                  {/* Modo */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Modo de Operación <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="mode"
-                          checked={formData.mode === 'SANDBOX'}
-                          onChange={() => handleChange('mode', 'SANDBOX' as OpenPayMode)}
-                          disabled={!canConfigure}
-                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-700">
-                          {OPENPAY_MODE_LABELS.SANDBOX}
-                        </span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="mode"
-                          checked={formData.mode === 'PRODUCTION'}
-                          onChange={() => handleChange('mode', 'PRODUCTION' as OpenPayMode)}
-                          disabled={!canConfigure}
-                          className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-700">
-                          {OPENPAY_MODE_LABELS.PRODUCTION}
-                        </span>
-                      </label>
-                    </div>
-                    {formData.mode === 'PRODUCTION' && (
-                      <div className="mt-2 bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
-                        ⚠️ Asegúrate de usar tus credenciales de producción.
+                {isOpen && (
+                  <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                    {lvl.level === 1 ? (
+                      <p className="text-sm text-emerald-700 font-medium">✓ Ya tienes acceso a todos los métodos de este nivel.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Lo que desbloqueas</p>
+                          <ul className="space-y-1.5">
+                            {lvl.unlocks.map(u => (
+                              <li key={u} className="flex items-center gap-2 text-sm text-gray-700">
+                                <span className="w-1.5 h-1.5 bg-[#0A3D2B] rounded-full flex-shrink-0" />{u}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Requisitos</p>
+                          <ul className="space-y-2">
+                            {lvl.reqs.map(r => (
+                              <li key={r.label} className="flex items-center justify-between gap-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  {r.done
+                                    ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                                    : 'progress' in r
+                                      ? <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                                      : <Lock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                  }
+                                  <span className={r.done ? 'line-through text-gray-400' : 'text-gray-700'}>{r.label}</span>
+                                </div>
+                                {'progress' in r && !r.done && (
+                                  <span className="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">
+                                    {r.progress} / {r.required}
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                          {lvl.level === trustLevel + 1 && (
+                            <button className="mt-3 flex items-center gap-1 text-sm text-[#0A3D2B] font-medium hover:underline">
+                              <TrendingUp className="w-3.5 h-3.5" /> Ver mis ventas →
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Botones de acción */}
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    onClick={handleSaveConfig}
-                    disabled={!canConfigure || isSaving}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
-                  >
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Guardando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        Guardar configuración
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={handleVerifyConnection}
-                    disabled={!config || verifying}
-                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
-                  >
-                    {verifying ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Verificando...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4" />
-                        Verificar conexión
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Estado de conexión */}
-                {config && config.connectionStatus !== 'DISCONNECTED' && (
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${CONNECTION_STATUS_COLORS[config.connectionStatus]}`}>
-                      {config.connectionStatus === 'CONNECTED' && <CheckCircle className="w-4 h-4" />}
-                      {config.connectionStatus === 'ERROR' && <XCircle className="w-4 h-4" />}
-                      <span className="font-medium text-sm">
-                        {CONNECTION_STATUS_LABELS[config.connectionStatus]}
-                      </span>
-                      {config.lastVerifiedAt && config.connectionStatus === 'CONNECTED' && (
-                        <span className="text-sm">- {formatDate(config.lastVerifiedAt)}</span>
-                      )}
-                    </div>
-                    {config.errorMessage && (
-                      <p className="mt-2 text-sm text-red-600">{config.errorMessage}</p>
                     )}
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* DIVIDER */}
-            <div className="border-t border-gray-300"></div>
-
-            {/* PASO 4: SECCIÓN FINTOC */}
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Fintoc</h3>
-                <p className="text-sm text-gray-600">Pago con SPEI procesado por Fintoc</p>
-              </div>
-
-              {/* CASO A: Fintoc NO habilitado */}
-              {!appPayments.fintoc.enabled && (
-                <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Lock className="w-6 h-6 text-gray-500" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="text-base font-semibold text-gray-900 mb-2">
-                        🔒 Fintoc no está habilitado
-                      </h4>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Este procesador no está disponible en tu plan actual. Contacta a soporte para habilitarlo.
-                      </p>
-                      <button
-                        onClick={() => showToast('Contacta a soporte@pochteca.com para habilitar Fintoc', 'info')}
-                        className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
-                      >
-                        Contactar soporte
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* CASO B: Fintoc habilitado */}
-              {appPayments.fintoc.enabled && (
-                <>
-                  {/* Banner informativo Fintoc */}
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                    <div className="flex gap-3">
-                      <AlertCircle className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-indigo-800">
-                        <p className="font-medium mb-1">¿Dónde encuentro mis credenciales?</p>
-                        <p className="mb-2">
-                          Inicia sesión en tu Dashboard de Fintoc → Configuración → API Keys
-                        </p>
-                        <a
-                          href="https://docs.fintoc.com/docs/welcome"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-indigo-700 underline hover:text-indigo-900 inline-flex items-center gap-1"
-                        >
-                          docs.fintoc.com/docs/welcome
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Formulario Fintoc */}
-                  <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-                    <div className="space-y-4">
-                      {/* Secret Key */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Secret Key <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showFintocSecretKey ? 'text' : 'password'}
-                            value={fintocFormData.secretKey}
-                            onChange={(e) => handleFintocChange('secretKey', e.target.value)}
-                            disabled={!canConfigure}
-                            placeholder="sk_live_************************"
-                            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowFintocSecretKey(!showFintocSecretKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                          >
-                            {showFintocSecretKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        <p className="mt-1 text-xs text-gray-500">
-                          Esta clave se guarda de forma segura
-                        </p>
-                      </div>
-
-                      {/* Public Key */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Public Key <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={fintocFormData.publicKey}
-                          onChange={(e) => handleFintocChange('publicKey', e.target.value)}
-                          disabled={!canConfigure}
-                          placeholder="pk_live_************************"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100"
-                        />
-                      </div>
-
-                      {/* Modo */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Modo <span className="text-red-500">*</span>
-                        </label>
-                        <div className="flex gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="fintocMode"
-                              checked={fintocFormData.mode === 'sandbox'}
-                              onChange={() => handleFintocChange('mode', 'sandbox' as FintocMode)}
-                              disabled={!canConfigure}
-                              className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="text-sm text-gray-700">
-                              {FINTOC_MODE_LABELS.sandbox}
-                            </span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="fintocMode"
-                              checked={fintocFormData.mode === 'live'}
-                              onChange={() => handleFintocChange('mode', 'live' as FintocMode)}
-                              disabled={!canConfigure}
-                              className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="text-sm text-gray-700">
-                              {FINTOC_MODE_LABELS.live}
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Botones de acción */}
-                    <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={handleSaveFintocConfig}
-                        disabled={!canConfigure || isSavingFintoc}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
-                      >
-                        {isSavingFintoc ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4" />
-                            Guardar configuración
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        onClick={handleVerifyFintocConnection}
-                        disabled={!fintocConfig || verifyingFintoc}
-                        className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
-                      >
-                        {verifyingFintoc ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Verificando...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-4 h-4" />
-                            Verificar
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Estado de conexión */}
-                    {fintocConfig && fintocConfig.connectionStatus !== 'DISCONNECTED' && (
-                      <div className="pt-4 border-t border-gray-200">
-                        <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${CONNECTION_STATUS_COLORS[fintocConfig.connectionStatus]}`}>
-                          {fintocConfig.connectionStatus === 'CONNECTED' && <CheckCircle className="w-4 h-4" />}
-                          {fintocConfig.connectionStatus === 'ERROR' && <XCircle className="w-4 h-4" />}
-                          <span className="font-medium text-sm">
-                            {CONNECTION_STATUS_LABELS[fintocConfig.connectionStatus]}
-                          </span>
-                          {fintocConfig.lastVerifiedAt && fintocConfig.connectionStatus === 'CONNECTED' && (
-                            <span className="text-sm">- {formatDate(fintocConfig.lastVerifiedAt)}</span>
-                          )}
-                        </div>
-                        {fintocConfig.errorMessage && (
-                          <p className="mt-2 text-sm text-red-600">{fintocConfig.errorMessage}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Métodos de Pago */}
-        {activeTab === 'methods' && (
-          <div className="space-y-4">
-            {!isConnected && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                ⚠️ Conecta tu cuenta de OpenPay en la pestaña "Configuración" para habilitar métodos de pago.
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {paymentMethods.map((method) => {
-                const MethodIcon = PAYMENT_METHOD_ICONS[method.key];
-                
-                // Determinar estados para FINTOC_SPEI
-                let isDisabled = false;
-                let disabledReason = '';
-                let badgeText = '';
-                
-                if (method.key === 'FINTOC_SPEI') {
-                  if (!appPayments.fintoc.enabled) {
-                    isDisabled = true;
-                    disabledReason = 'Fintoc no está habilitado en tu plan';
-                    badgeText = 'No habilitado';
-                  } else if (!appPayments.fintoc.isConfigured) {
-                    isDisabled = true;
-                    disabledReason = 'Configura tus credenciales en la pestaña Configuración';
-                    badgeText = 'Sin configurar';
-                  }
-                } else {
-                  if (!isConnected) {
-                    isDisabled = true;
-                    disabledReason = 'Conecta tu cuenta de OpenPay primero';
-                  }
-                }
-
-                return (
-                  <div
-                    key={method.key}
-                    className="bg-white border border-gray-200 rounded-lg p-5 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-12 h-12 ${method.key === 'FINTOC_SPEI' ? 'bg-indigo-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center`}>
-                          <MethodIcon className={`w-6 h-6 ${method.key === 'FINTOC_SPEI' ? 'text-indigo-600' : 'text-blue-600'}`} />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{method.label}</h3>
-                          <p className="text-xs text-gray-500">{method.description}</p>
-                        </div>
-                      </div>
-
-                      {/* Toggle switch */}
-                      <div className="flex flex-col items-end gap-1">
-                        {isDisabled && badgeText && (
-                          <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                            {badgeText}
-                          </span>
-                        )}
-                        <label 
-                          className="relative inline-flex items-center cursor-pointer"
-                          title={isDisabled ? disabledReason : ''}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={method.isEnabled}
-                            onChange={(e) => handleToggleMethod(method.key, e.target.checked)}
-                            disabled={isDisabled || !canConfigure}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                      <span className="text-xs text-gray-500">Comisión</span>
-                      <span className="text-sm font-medium text-gray-700">{method.commission}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: Historial de Transacciones - PASO 6 */}
-        {activeTab === 'transactions' && (
-          <div className="space-y-4">
-            {/* Filtros */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {/* Filtro Procesador */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Procesador</label>
-                  <select
-                    value={filters.processor}
-                    onChange={(e) => setFilters({ ...filters, processor: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="">Todos</option>
-                    <option value="OPENPAY">OpenPay</option>
-                    <option value="FINTOC">Fintoc</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Método</label>
-                  <select
-                    value={filters.method}
-                    onChange={(e) => setFilters({ ...filters, method: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="">Todos</option>
-                    {Object.entries(PAYMENT_METHOD_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                  <select
-                    value={filters.status}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="">Todos</option>
-                    {Object.entries(TRANSACTION_STATUS_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
-                  <input
-                    type="date"
-                    value={filters.startDate}
-                    onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
-                  <input
-                    type="date"
-                    value={filters.endDate}
-                    onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-                <span className="text-sm text-gray-600">
-                  {filteredTransactions.length} transacción{filteredTransactions.length !== 1 ? 'es' : ''}
-                </span>
-                <button
-                  onClick={handleExportTransactions}
-                  disabled={filteredTransactions.length === 0}
-                  className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
-                >
-                  <Download className="w-4 h-4" />
-                  Exportar CSV
-                </button>
-              </div>
-            </div>
-
-            {/* Tabla de transacciones */}
-            {filteredTransactions.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
-                <CreditCard className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-xl font-medium text-gray-900 mb-2">
-                  No hay transacciones
-                </h3>
-                <p className="text-gray-500">
-                  {filters.processor || filters.method || filters.status || filters.startDate || filters.endDate
-                    ? 'No se encontraron transacciones con los filtros aplicados.'
-                    : 'Las transacciones procesadas aparecerán aquí.'}
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          ID Transacción
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Procesador
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Fecha
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Pedido
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Monto
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Método
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Estado
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {filteredTransactions.map((transaction) => (
-                        <tr key={transaction.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <span className="text-sm font-mono text-gray-900">
-                              {transaction.processorTransactionId}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${PROCESSOR_COLORS[transaction.processor]}`}>
-                              {PROCESSOR_LABELS[transaction.processor]}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-sm text-gray-600">
-                              {formatDate(transaction.createdAt)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {transaction.orderId ? (
-                              <Link
-                                to={`/orders/${transaction.orderId}`}
-                                className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
-                              >
-                                {transaction.orderNumber}
-                              </Link>
-                            ) : (
-                              <span className="text-sm text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm font-medium text-gray-900">
-                              ${transaction.amount.toFixed(2)} {transaction.currency}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-sm text-gray-600">
-                              {PAYMENT_METHOD_LABELS[transaction.method]}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${TRANSACTION_STATUS_COLORS[transaction.status]}`}>
-                              {TRANSACTION_STATUS_LABELS[transaction.status]}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <a
-                              href={transaction.processorUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-                            >
-                              Ver en {transaction.processor === 'FINTOC' ? 'Fintoc' : 'OpenPay'}
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+            );
+          })}
+        </div>
+      </div>
     </div>
+  );
+}
 
-      {/* PASO 7: DevToggle */}
-      <DevToggle />
+// ── Tab: Configuración ────────────────────────────────────────────────────────
+function ConfigTab() {
+  const { tenantGateways, loading } = usePayments();
+  const flags = usePaymentFlags();
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-emerald-500 animate-spin" /></div>;
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Sección 1: MP Xokly + CLABE */}
+      <div className="space-y-3">
+        <MPXoklyCard />
+        <DepositAccountForm />
+      </div>
+
+      {/* Sección 2: Métodos configurados por ti */}
+      <div>
+        <div className="border-l-4 border-amber-500 pl-4 mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Métodos configurados por ti</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Conecta tus propias cuentas de pago para tener control total. Disponibles según tu nivel de confianza en Xokly.
+          </p>
+        </div>
+        <div className="space-y-3">
+          {PROCESSORS.map(proc => (
+            <ProcessorCard
+              key={proc.key}
+              proc={proc}
+              currentTrustLevel={flags.trustLevel}
+              tenantGateway={tenantGateways.find(g => g.provider === proc.key)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Sección 3: Trust Level */}
+      {flags.showTrustMeter && <TrustLevelSection trustLevel={flags.trustLevel} />}
+    </div>
+  );
+}
+
+// ── Tab: Métodos de Pago ──────────────────────────────────────────────────────
+function MethodsTab() {
+  const { tenantGateways } = usePayments();
+  const [cod,    setCod]    = useState(true);
+  const [fintoc, setFintoc] = useState(false);
+  const fintocConnected = tenantGateways.some(g => g.provider === 'fintoc' && g.status === 'connected');
+
+  const mpMethods = [
+    { emoji: '💳', name: 'Tarjeta crédito/débito', commission: '3.6% + $3 MXN',    settle: 'Inmediato' },
+    { emoji: '🏪', name: 'OXXO Pay',               commission: '3.9% + $10 MXN',   settle: '1-2 días'  },
+    { emoji: '🏛️', name: 'Transferencia SPEI',      commission: '$8 MXN por cobro', settle: '1-2 días'  },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="border-l-4 border-amber-500 pl-4 mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Tú decides</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Activa o desactiva estos métodos según tu operación.</p>
+        </div>
+        <div className="space-y-3">
+          <ToggleRow icon={<Truck className="w-5 h-5 text-gray-600" />} name="Contra entrega"
+            desc="El cliente paga al recibir el pedido — sin comisión"
+            enabled={cod} onToggle={() => setCod(v => !v)} />
+          <ToggleRow icon={<Banknote className="w-5 h-5 text-indigo-500" />} name="SPEI vía Fintoc"
+            desc={fintocConnected ? 'Transferencia directa desde el banco del comprador' : 'Configura Fintoc en Configuración primero →'}
+            enabled={fintoc && fintocConnected} disabled={!fintocConnected}
+            onToggle={() => fintocConnected && setFintoc(v => !v)}
+            tag={!fintocConnected ? 'Fintoc no configurado' : undefined} />
+        </div>
+      </div>
+
+      <div>
+        <div className="border-l-4 border-blue-400 pl-4 mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Lo gestiona Mercado Pago</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Siempre activos. Xokly los habilita automáticamente.</p>
+        </div>
+        <div className="space-y-3">
+          {mpMethods.map(m => (
+            <div key={m.name} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{m.emoji}</span>
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">{m.name}</p>
+                  <p className="text-xs text-gray-500">Comisión: {m.commission} · Acreditación: {m.settle}</p>
+                </div>
+              </div>
+              <span className="text-xs bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-1 rounded-full font-medium">Siempre activo</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ icon, name, desc, enabled, onToggle, disabled, tag }: {
+  icon: React.ReactNode; name: string; desc: string; enabled: boolean;
+  onToggle: () => void; disabled?: boolean; tag?: string;
+}) {
+  return (
+    <div className={`bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-4 ${disabled ? 'opacity-60' : ''}`}>
+      <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-gray-900 text-sm">{name}</p>
+          {tag && <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">{tag}</span>}
+        </div>
+        <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+      </div>
+      <button onClick={onToggle} disabled={disabled}
+        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-emerald-500' : 'bg-gray-300'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+      </button>
+    </div>
+  );
+}
+
+// ── Tab: Historial y Reportes ─────────────────────────────────────────────────
+function HistoryTab() {
+  const {
+    intents, pagination, stats, intentsMeta,
+    loadingIntents, loadingStats, statsError,
+    activeFilters, setActiveFilters,
+    statsPeriod, setStatsPeriod,
+    refreshIntents, refreshStats,
+  } = usePayments();
+  const { showToast } = useToast();
+  const flags = usePaymentFlags();
+
+  useEffect(() => {
+    refreshIntents();
+    if (flags.showStats) refreshStats({ period: statsPeriod });
+  }, []);
+
+  const handlePeriod = async (p: 'week' | 'month' | 'year') => {
+    setStatsPeriod(p);
+    await refreshStats({ period: p });
+  };
+
+  const handleFilter = async (key: string, val: string) => {
+    const next = { ...activeFilters, [key]: val, page: 1 };
+    setActiveFilters(next);
+    await refreshIntents(next);
+  };
+
+  const handlePage = async (page: number) => {
+    const next = { ...activeFilters, page };
+    setActiveFilters(next);
+    await refreshIntents(next);
+  };
+
+  const PERIOD_LABELS = { week: 'Esta semana', month: 'Este mes', year: 'Este año' };
+
+  return (
+    <div className="space-y-6">
+      {/* Controles */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {(['week', 'month', 'year'] as const).map(p => (
+          <button key={p} onClick={() => handlePeriod(p)}
+            className={`text-sm px-4 py-1.5 rounded-full border transition-colors ${
+              statsPeriod === p ? 'bg-[#0A3D2B] text-white border-[#0A3D2B]' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+            }`}>
+            {PERIOD_LABELS[p]}
+          </button>
+        ))}
+        {flags.canExportCsv && (
+          <button
+            onClick={() => { exportIntentsCSV(intents); showToast('CSV descargado', 'success'); }}
+            className="ml-auto flex items-center gap-1.5 text-sm text-gray-600 border border-gray-300 hover:border-gray-400 px-3 py-1.5 rounded-full bg-white transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" /> Exportar CSV
+          </button>
+        )}
+      </div>
+
+      {/* Métricas */}
+      {!flags.showStats ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-center gap-3 text-sm text-amber-700">
+          <Info className="w-5 h-5 flex-shrink-0" />
+          Actualiza a plan Básico o superior para ver estadísticas de comisiones y ganancia real.
+        </div>
+      ) : statsError ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex items-center gap-3 text-sm text-red-700">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" /> {statsError}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: 'Ventas brutas',   value: stats ? fmt(stats.gmv) : '$0',                   sub: `${stats?.totalOrders ?? 0} pedidos`, color: '' },
+            { label: 'Comisiones',      value: stats ? fmt(stats.commissions.total) : '$0',      sub: 'MP + Xokly',                         color: 'text-red-600' },
+            { label: 'Costos',          value: stats ? fmt(stats.costs.products + stats.costs.shipping) : '$0', sub: 'Producto + envío',   color: '' },
+            { label: 'Ganancia real',   value: stats ? fmt(stats.realProfit) : '$0',             sub: 'Ventas − costos − comisiones',
+              color: (stats?.realProfit ?? 0) > 0 ? 'text-emerald-600' : '' },
+          ].map(m => (
+            <div key={m.label} className="bg-white rounded-xl border border-gray-200 p-5">
+              <p className="text-xs text-gray-500 mb-1 font-medium">{m.label}</p>
+              {loadingStats
+                ? <div className="h-8 w-20 bg-gray-100 rounded animate-pulse mt-1" />
+                : <p className={`text-2xl font-bold ${m.color || 'text-gray-900'}`}>{m.value}</p>}
+              <p className="text-xs text-gray-400 mt-1">{m.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabla intents */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900 text-sm">Historial de pagos</h3>
+          <div className="flex items-center gap-3">
+            {intentsMeta && intentsMeta.historyDays !== -1 && (
+              <span className="text-xs text-gray-400">Historial: {intentsMeta.historyDays} días</span>
+            )}
+            <button onClick={() => refreshIntents(activeFilters)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <RefreshCw className={`w-4 h-4 ${loadingIntents ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div className="flex gap-3 px-5 py-3 border-b border-gray-100 bg-gray-50 flex-wrap">
+          <select value={String(activeFilters.status ?? '')} onChange={e => handleFilter('status', e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400">
+            <option value="">Todos los estados</option>
+            {(Object.keys(INTENT_STATUS_LABEL) as IntentStatus[]).map(s => (
+              <option key={s} value={s}>{INTENT_STATUS_LABEL[s]}</option>
+            ))}
+          </select>
+          <select value={String(activeFilters.limit ?? 20)} onChange={e => handleFilter('limit', e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-400">
+            {[10, 20, 50].map(n => <option key={n} value={n}>{n} por página</option>)}
+          </select>
+        </div>
+
+        {loadingIntents ? (
+          <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-emerald-500 animate-spin" /></div>
+        ) : intents.length === 0 ? (
+          <div className="flex flex-col items-center py-16">
+            <CreditCard className="w-10 h-10 text-gray-200 mb-3" />
+            <p className="text-sm text-gray-500">Sin pagos en este período</p>
+          </div>
+        ) : (
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    {['Intent ID', 'Artículos', 'Total', 'Estado', 'Fecha', 'Orden'].map(h => (
+                      <th key={h} className={`px-5 py-3 font-medium text-left ${h === 'Total' ? 'text-right' : ''}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {intents.map(i => (
+                    <tr key={i.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3.5 font-mono text-xs text-gray-500">{i.intentId.slice(-14)}</td>
+                      <td className="px-5 py-3.5 text-gray-700 max-w-[180px] truncate">{i.items.map(x => x.name).join(', ') || '—'}</td>
+                      <td className="px-5 py-3.5 text-right font-semibold text-gray-900">{i.total != null ? fmtFull(i.total) : '—'}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${INTENT_STATUS_COLOR[i.status]}`}>
+                          {INTENT_STATUS_LABEL[i.status]}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-gray-500 text-xs whitespace-nowrap">{fmtShort(i.createdAt)}</td>
+                      <td className="px-5 py-3.5">
+                        {i.orderNumber
+                          ? <span className="font-mono text-xs text-emerald-600">{i.orderNumber}</span>
+                          : <span className="text-xs text-gray-400">Sin orden</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden divide-y divide-gray-100">
+              {intents.map(i => (
+                <div key={i.id} className="px-5 py-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <p className="text-sm font-medium text-gray-900 truncate max-w-[200px]">
+                      {i.items.map(x => x.name).join(', ') || i.intentId.slice(-12)}
+                    </p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${INTENT_STATUS_COLOR[i.status]}`}>
+                      {INTENT_STATUS_LABEL[i.status]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>{fmtShort(i.createdAt)}</span>
+                    <span className="font-semibold text-gray-900">{i.total != null ? fmtFull(i.total) : '—'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">
+                <span>{pagination.total} resultados · pág {pagination.page}/{pagination.totalPages}</span>
+                <div className="flex gap-2">
+                  <button disabled={pagination.page <= 1} onClick={() => handlePage(pagination.page - 1)}
+                    className="px-3 py-1 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-40 transition-colors">← Ant</button>
+                  <button disabled={pagination.page >= pagination.totalPages} onClick={() => handlePage(pagination.page + 1)}
+                    className="px-3 py-1 rounded-lg border border-gray-300 hover:bg-white disabled:opacity-40 transition-colors">Sig →</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ChevronRight inline (no existe en lucide-react con este nombre) ───────────
+function ChevronRight({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+    </svg>
+  );
+}
+
+// ── Página Principal ──────────────────────────────────────────────────────────
+type Tab = 'config' | 'methods' | 'history';
+
+const TABS: { key: Tab; label: string; Icon: React.ElementType }[] = [
+  { key: 'config',  label: 'Configuración',       Icon: Settings2  },
+  { key: 'methods', label: 'Métodos de Pago',      Icon: CreditCard },
+  { key: 'history', label: 'Historial y Reportes', Icon: Clock      },
+];
+
+export function Payments() {
+  const { hasPermission } = useAuth();
+  const { paymentConfig, loading, patchConfig } = usePayments();
+  const flags = usePaymentFlags();
+
+  const [activeTab,      setActiveTab]      = useState<Tab>('config');
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [alerts,         setAlerts]         = useState<{ id: string; provider: string; message: string }[]>([]);
+
+  // Sincronizar showOnboarding desde DB cuando cargue
+  useEffect(() => {
+    if (!loading && paymentConfig !== null) {
+      // Si el flag de DB dice true, y no hay fallback local, mostrar onboarding
+      const fallback = localStorage.getItem(OB_FALLBACK_KEY);
+      setShowOnboarding(paymentConfig.flags.showOnboarding && !fallback);
+    }
+  }, [loading, paymentConfig]);
+
+  // Sincronizar alerts desde flags
+  useEffect(() => {
+    setAlerts(flags.alerts);
+  }, [JSON.stringify(flags.alerts)]);
+
+  if (!hasPermission('payments:read')) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center px-4">
+        <Lock className="w-10 h-10 text-gray-300 mb-3" />
+        <h2 className="text-lg font-semibold text-gray-700">Sin acceso</h2>
+        <p className="text-sm text-gray-500 mt-1">No tienes permiso para ver el módulo de Pagos.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Onboarding wizard */}
+      {showOnboarding && !loading && (
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
+          onComplete={() => patchConfig({ showOnboarding: false })}
+        />
+      )}
+
+      {/* Alert banners */}
+      <AlertBanner
+        alerts={alerts}
+        onDismiss={id => setAlerts(prev => prev.filter(a => a.id !== id))}
+      />
+
+      <div className="min-h-screen bg-[#F5F3EF]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
+
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-2 text-sm text-gray-500 mb-5">
+            <Link to="/dashboard" className="hover:text-gray-700 flex items-center gap-1 transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+              </svg>
+              Dashboard
+            </Link>
+            <span>/</span>
+            <span className="text-gray-900 font-medium">Pagos</span>
+          </div>
+
+          {/* Page Header */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-12 h-12 bg-[#0A3D2B] rounded-xl flex items-center justify-center flex-shrink-0">
+              <CreditCard className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Pagos</h1>
+              <p className="text-sm text-gray-500">Configura cómo quieres recibir el dinero de tus ventas</p>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 bg-white rounded-t-xl px-1 mb-0">
+            {TABS.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                  activeTab === key
+                    ? 'border-[#0A3D2B] text-[#0A3D2B]'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div className="bg-[#F5F3EF] pt-6">
+            {activeTab === 'config'  && <ConfigTab />}
+            {activeTab === 'methods' && <MethodsTab />}
+            {activeTab === 'history' && <HistoryTab />}
+          </div>
+        </div>
+      </div>
     </>
   );
 }
