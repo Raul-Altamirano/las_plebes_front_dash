@@ -1,58 +1,86 @@
-// Tipos de descuento
-export type DiscountType = 'PERCENT' | 'FIXED';
+// ── Tipos base ────────────────────────────────────────────────────────────────
+export type DiscountType = 'PERCENT' | 'FIXED' | 'FREE_SHIPPING';
 
-// Alcance de la promoción/cupón
+export type PromotionStatus = 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'INACTIVE';
+
+/** Alcance interno del FE (el BE lo llama `appliesTo`, la API layer convierte) */
 export interface PromotionScope {
   all: boolean;
   categoryIds?: string[];
   productIds?: string[];
 }
 
-// Promoción (automática, sin código)
+// ── Promoción ─────────────────────────────────────────────────────────────────
 export interface Promotion {
   id: string;
   name: string;
-  type: DiscountType;
-  value: number; // PERCENT: 1-90, FIXED: > 0
-  startsAt?: string; // ISO string
-  endsAt?: string; // ISO string
-  isActive: boolean;
-  scope: PromotionScope;
-  stackable: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Cupón (con código)
-export interface Coupon {
-  id: string;
-  code: string; // uppercase, único
+  description?: string;
   type: DiscountType;
   value: number;
-  minSubtotal?: number;
+  currency: string;
+  isActive: boolean;
+  status: PromotionStatus;       // computado por el BE en cada respuesta
+  stackable: boolean;
+  couponRequired: boolean;       // false = auto-aplica · true = necesita código
   startsAt?: string;
   endsAt?: string;
-  usageLimit?: number;
-  usedCount: number;
   scope: PromotionScope;
-  isActive: boolean;
-  stackable: boolean;
+  // ── campos de control de descuento (Modelo A) ─────────────────────────────
+  minSubtotal?: number;          // mínimo subtotal de participantes
+  minDiscountPct?: number;       // piso del descuento como % del subtotal
+  maxDiscountPct?: number;       // techo del descuento como % del subtotal
   createdAt: string;
   updatedAt: string;
 }
 
-// Estados de promoción/cupón
-export type PromotionStatus = 'ACTIVE' | 'SCHEDULED' | 'EXPIRED' | 'INACTIVE';
+// ── Cupón (Modelo A: solo activador, la lógica vive en la Promo) ──────────────
+export interface Coupon {
+  id: string;
+  code: string;                  // MAYÚSCULAS, único por tenant
+  promotionId: string;           // requerido — apunta a la promo con la lógica
+  isActive: boolean;
+  startsAt?: string;             // puede estrechar las fechas de la promo
+  endsAt?: string;
+  usageLimit?: number;           // null = ilimitado (global)
+  perCustomerLimit: number;      // default 1
+  usedCount: number;
+  createdAt: string;
+  updatedAt: string;
+  // Desnormalizado opcionalmente por el FE para mostrar en tabla
+  promotion?: Pick<Promotion, 'id' | 'name' | 'type' | 'value' | 'currency' | 'status'>;
+}
 
-// Resultado del cálculo de descuento
-export interface DiscountResult {
-  originalPrice: number;
-  discountedPrice: number;
-  discount: number;
-  appliedPromotions: {
-    id: string;
-    name: string;
-    type: DiscountType;
-    value: number;
-  }[];
+// ── Resultado del cálculo de descuento ────────────────────────────────────────
+export interface CartItem {
+  productId: string;
+  categoryIds?: string[];
+  categoryId?: string;
+  price: number;
+  qty: number;
+}
+
+export interface DiscountCalculation {
+  participatingItems: CartItem[];
+  subtotal: number;
+  rawDiscount: number;
+  discountAmount: number;
+  currency: string;
+}
+
+export interface CouponValidationResult {
+  valid: boolean;
+  errorCode?: string;
+  message?: string;
+  coupon?: Coupon;
+  promotion?: Promotion;
+  calculation?: DiscountCalculation;
+}
+
+// ── Warnings al activar promo con conflictos ──────────────────────────────────
+export interface PromotionWarning {
+  promotionId: string;
+  promotionName: string;
+  conflictingProductIds: string[];
+  conflictingCategoryIds: string[];
+  message: string;
 }

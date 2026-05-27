@@ -70,8 +70,26 @@ export function computeDiscountedPrice(
 }
 
 /**
- * Calcula el precio efectivo de un producto considerando promociones activas
- * Para productos con variantes, usa variant.price ?? product.price
+ * Resuelve qué promos aplican realmente según stackable.
+ *
+ * - Todas stackable=true  → se acumulan en paralelo (cada % sobre precio original)
+ * - Alguna stackable=false → solo gana la de mayor descuento
+ */
+function resolveStackable(promos: Promotion[], basePrice: number): Promotion[] {
+  if (promos.length <= 1) return promos;
+  if (promos.every(p => p.stackable)) return promos;
+
+  // Alguna no acumula → la de mayor descuento gana
+  return [promos.reduce((best, p) => {
+    const discA = p.type === 'PERCENT' ? basePrice * (p.value / 100) : p.value;
+    const discB = best.type === 'PERCENT' ? basePrice * (best.value / 100) : best.value;
+    return discA > discB ? p : best;
+  })];
+}
+
+/**
+ * Calcula el precio efectivo de un producto considerando promociones activas.
+ * Respeta el flag `stackable`: si todas lo son se acumulan, si no solo gana la mejor.
  */
 export function getEffectivePrice(
   product: Product,
@@ -85,49 +103,41 @@ export function getEffectivePrice(
   hasDiscount: boolean;
 } {
   const basePrice = product.price;
-  
-  // Filtrar promociones aplicables
-  const applicablePromotions = promotions.filter(promo => {
+
+  // Filtrar promociones aplicables (activas, vigentes, en alcance)
+  const applicable = promotions.filter(promo => {
     if (!promo.isActive) return false;
     if (!isWithinDateRange(now, promo.startsAt, promo.endsAt)) return false;
     if (!appliesToProduct(promo.scope, product)) return false;
     return true;
   });
-  
-  if (applicablePromotions.length === 0) {
-    return {
-      basePrice,
-      effectivePrice: basePrice,
-      discount: 0,
-      appliedPromotions: [],
-      hasDiscount: false
-    };
+
+  if (applicable.length === 0) {
+    return { basePrice, effectivePrice: basePrice, discount: 0, appliedPromotions: [], hasDiscount: false };
   }
-  
-  // Ordenar por descuento (mayor a menor) para elegir la mejor
-  const sortedPromotions = [...applicablePromotions].sort((a, b) => {
-    const discountA = computeDiscountedPrice(basePrice, a.type, a.value);
-    const discountB = computeDiscountedPrice(basePrice, b.type, b.value);
-    return discountA - discountB; // Menor precio = mejor descuento
-  });
-  
-  // Por simplicidad MVP: aplicar solo la mejor promoción
-  // TODO: implementar stackable en V2
-  const bestPromo = sortedPromotions[0];
-  const effectivePrice = computeDiscountedPrice(basePrice, bestPromo.type, bestPromo.value);
+
+  // Resolver stackable
+  const effective = resolveStackable(applicable, basePrice);
+
+  // Aplicar en paralelo: cada descuento se calcula sobre el precio ORIGINAL
+  let totalDiscount = 0;
+  for (const promo of effective) {
+    if (promo.type === 'PERCENT') {
+      totalDiscount += basePrice * (promo.value / 100);
+    } else if (promo.type === 'FIXED') {
+      totalDiscount += promo.value;
+    }
+  }
+
+  const effectivePrice = Math.max(0, basePrice - totalDiscount);
   const discount = basePrice - effectivePrice;
-  
+
   return {
     basePrice,
     effectivePrice,
     discount,
-    appliedPromotions: [{
-      id: bestPromo.id,
-      name: bestPromo.name,
-      type: bestPromo.type,
-      value: bestPromo.value
-    }],
-    hasDiscount: discount > 0
+    appliedPromotions: effective.map(p => ({ id: p.id, name: p.name, type: p.type, value: p.value })),
+    hasDiscount: discount > 0,
   };
 }
 

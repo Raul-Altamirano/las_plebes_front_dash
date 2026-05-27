@@ -207,3 +207,4 @@ export function usePayments() {
   if (!ctx) throw new Error('usePayments must be used within PaymentsProvider');
   return ctx;
 }
+

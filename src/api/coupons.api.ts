@@ -1,97 +1,105 @@
 import { marketingFetch } from './marketing.client';
-import type { Coupon } from '../app/types/promotion';
+import type { Coupon, CartItem, CouponValidationResult } from '../app/types/promotion';
 
-export type CouponType = 'PERCENT' | 'FIXED' | 'FREESHIP';
+// ── DTOs ──────────────────────────────────────────────────────────────────────
 
+/** Modelo A: el cupón ya no tiene type/value propios, apunta a una promoción */
 export type CreateCouponDto = {
   code: string;
-  type: CouponType;
-  value: number;
+  promotionId: string;           // requerido — toda la lógica vive en la promo
   isActive?: boolean;
-  usageLimit?: number;
-  minSubtotal?: number;
-  startsAt?: string;
+  startsAt?: string;             // opcional: estrecha las fechas de la promo
   endsAt?: string;
-  stackable?: boolean;
-  scope?: {
-    all: boolean;
-    categoryIds?: string[];
-    productIds?: string[];
-  };
+  usageLimit?: number;           // null/undefined = ilimitado
+  perCustomerLimit?: number;     // default 1
 };
 
 export interface RedeemCouponDto {
   code: string;
-  customerId?: string;
+  customerId: string;
+  cartItems: CartItem[];
   orderId?: string;
-  subtotal?: number;
 }
 
-export interface RedeemCouponResponse {
-  coupon: Coupon;
-  discount: number;
-  finalAmount: number;
-}
+// ── Mapper ────────────────────────────────────────────────────────────────────
 
-/** Normaliza el shape del BE → shape interno de la app */
 function mapCoupon(raw: any): Coupon {
   return {
-    id:           raw.id,
-    code:         raw.code,
-    type:         raw.type,
-    value:        raw.value,
-    // BE devuelve `active`, la app usa `isActive`
-    isActive:     raw.isActive ?? raw.active ?? false,
-    // BE devuelve `usageLimit`, la app también usa `usageLimit`
-    usageLimit:   raw.usageLimit ?? raw.maxUses ?? undefined,
-    // BE devuelve `usedCount`, la app usa `usedCount`
-    usedCount:    raw.usedCount ?? raw.usageCount ?? 0,
-    // BE devuelve `minOrderAmount` o puede ser `minSubtotal`
-    minSubtotal:  raw.minSubtotal ?? raw.minOrderAmount ?? undefined,
-    startsAt:     raw.startsAt ?? undefined,
-    endsAt:       raw.endsAt ?? undefined,
-    stackable:    raw.stackable ?? false,
-    // BE no devuelve scope todavía → default a "todos"
-    scope:        raw.scope ?? { all: true },
-    createdAt:    raw.createdAt,
-    updatedAt:    raw.updatedAt,
+    id:               raw.id,
+    code:             raw.code,
+    promotionId:      raw.promotionId ?? '',
+    isActive:         raw.isActive ?? raw.active ?? false,
+    startsAt:         raw.startsAt  ?? undefined,
+    endsAt:           raw.endsAt    ?? undefined,
+    usageLimit:       raw.usageLimit  ?? undefined,
+    perCustomerLimit: raw.perCustomerLimit ?? 1,
+    usedCount:        raw.usedCount ?? 0,
+    createdAt:        raw.createdAt,
+    updatedAt:        raw.updatedAt,
+    // Opcional: datos desnormalizados de la promo (si el BE los incluye en el futuro)
+    promotion:        raw.promotion ?? undefined,
   };
 }
 
+/** FE → BE: convierte `isActive` → `active` */
+function mapDtoToApi(dto: CreateCouponDto): Record<string, any> {
+  const { isActive, ...rest } = dto;
+  return { ...rest, active: isActive ?? true };
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+
 export const couponsApi = {
-list: async (): Promise<Coupon[]> => {
-  const res = await marketingFetch<{ items: any[] }>('/coupons');
-  return (res?.items ?? []).map(mapCoupon);
-},
+  list: async (): Promise<Coupon[]> => {
+    const res = await marketingFetch<{ items: any[] }>('/coupons');
+    return (res?.items ?? []).map(mapCoupon);
+  },
 
-get: async (id: string): Promise<Coupon> => {
-  const res = await marketingFetch<any>(`/coupons/${id}`);
-  return mapCoupon(res);
-},
+  get: async (id: string): Promise<Coupon> => {
+    const res = await marketingFetch<any>(`/coupons/${id}`);
+    return mapCoupon(res?.data ?? res);
+  },
 
-create: async (dto: CreateCouponDto): Promise<Coupon> => {
-  const res = await marketingFetch<any>('/coupons', {
-    method: 'POST', body: JSON.stringify(dto),
-  });
-  return mapCoupon(res);
-},
+  create: async (dto: CreateCouponDto): Promise<Coupon> => {
+    const res = await marketingFetch<any>('/coupons', {
+      method: 'POST',
+      body: JSON.stringify(mapDtoToApi(dto)),
+    });
+    return mapCoupon(res?.data ?? res);
+  },
 
   update: async (id: string, dto: Partial<CreateCouponDto>): Promise<Coupon> => {
-    const raw = await marketingFetch(`/coupons/${id}`, {
+    const res = await marketingFetch<any>(`/coupons/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(dto),
+      body: JSON.stringify(mapDtoToApi(dto as CreateCouponDto)),
     });
-    return mapCoupon(raw?.data ?? raw);
+    return mapCoupon(res?.data ?? res);
   },
 
   remove: (id: string): Promise<void> =>
     marketingFetch(`/coupons/${id}`, { method: 'DELETE' }),
 
-  redeem: async (dto: RedeemCouponDto): Promise<RedeemCouponResponse> => {
-    const raw = await marketingFetch('/coupons/redeem', {
+  /**
+   * validate — valida y calcula el descuento SIN redimir.
+   * Llamar al escribir el código en el carrito.
+   */
+  validate: async (code: string, customerId: string, cartItems: CartItem[]): Promise<CouponValidationResult> => {
+    const res = await marketingFetch<any>('/coupons/validate', {
+      method: 'POST',
+      body: JSON.stringify({ code, customerId, cartItems }),
+    });
+    return res?.data ?? res;
+  },
+
+  /**
+   * redeem — redime el cupón y registra el uso.
+   * Solo llamar al CONFIRMAR la orden, no al escribir el código.
+   */
+  redeem: async (dto: RedeemCouponDto): Promise<CouponValidationResult> => {
+    const res = await marketingFetch<any>('/coupons/redeem', {
       method: 'POST',
       body: JSON.stringify(dto),
     });
-    return raw?.data ?? raw;
+    return res?.data ?? res;
   },
 };

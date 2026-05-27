@@ -1,115 +1,113 @@
-//    /src/app/pages/Cupons.tsx
 import { useState, useMemo } from 'react';
-import { Plus, Edit, Power, PowerOff, Trash2, Ticket, Calendar, Target, RotateCcw } from 'lucide-react';
+import { Plus, Edit, Power, PowerOff, Trash2, Ticket, Calendar, Hash } from 'lucide-react';
 import { useCoupons } from '../store/CouponsContext';
-import { useCategories } from '../store/CategoryContext';
-import { useProducts } from '../store/ProductsContext';
+import { usePromotions } from '../store/PromotionsContext';
 import { useAudit } from '../store/AuditContext';
-import { useAuth } from '../store/AuthContext';
 import { useToast } from '../store/ToastContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
+import { RefreshButton } from '../components/RefreshButton';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
-import { getPromotionStatus, validateCouponCode } from '../utils/promotionHelpers';
-import type { Coupon, DiscountType, PromotionScope, PromotionStatus } from '../types/promotion';
-import { RefreshButton } from '../components/RefreshButton';
+import type { Coupon, Promotion } from '../types/promotion';
+import type { CreateCouponDto } from '../../api/coupons.api';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getCouponStatus(coupon: Coupon): 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'SCHEDULED' {
+  const now = new Date();
+  if (coupon.endsAt && now > new Date(coupon.endsAt))       return 'EXPIRED';
+  if (!coupon.isActive)                                      return 'INACTIVE';
+  if (coupon.startsAt && now < new Date(coupon.startsAt))    return 'SCHEDULED';
+  return 'ACTIVE';
+}
+
+function getStatusBadge(coupon: Coupon) {
+  const s = getCouponStatus(coupon);
+  const map = {
+    ACTIVE:    { label: 'Activo',      variant: 'default'   as const },
+    INACTIVE:  { label: 'Inactivo',    variant: 'outline'   as const },
+    EXPIRED:   { label: 'Expirado',    variant: 'outline'   as const },
+    SCHEDULED: { label: 'Programado',  variant: 'secondary' as const },
+  };
+  const { label, variant } = map[s];
+  return <Badge variant={variant}>{label}</Badge>;
+}
+
+function promoLabel(promo: Promotion) {
+  const discount = promo.type === 'PERCENT'
+    ? `${promo.value}%`
+    : `$${promo.value.toFixed(2)}`;
+  return `${promo.name} — ${discount}`;
+}
+
+// ── Tipos de formulario ───────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  code:             '',
+  promotionId:      '',
+  startsAt:         '',
+  endsAt:           '',
+  usageLimit:       '',
+  perCustomerLimit: '1',
+  isActive:         true,
+};
+
+type CouponStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'SCHEDULED';
+
+// ── Componente ────────────────────────────────────────────────────────────────
 
 export default function Coupons() {
-// Destructuring — agrega status, lastFetch, refresh
-const { coupons, createCoupon, updateCoupon, refresh, deleteCoupon, status, lastFetch } = useCoupons();  const { categories } = useCategories();
-  const { products } = useProducts();
-  const { auditLog } = useAudit();
-  const { currentUser, hasPermission } = useAuth();
-  const { showToast } = useToast();
-  
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
-  const [statusFilter, setStatusFilter] = useState<PromotionStatus | 'ALL'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    code: '',
-    type: 'PERCENT' as DiscountType,
-    value: '',
-    minSubtotal: '',
-    startsAt: '',
-    endsAt: '',
-    usageLimit: '',
-    isActive: true,
-    scopeAll: true,
-    scopeCategoryIds: [] as string[],
-    scopeProductIds: [] as string[],
-    stackable: false,
-  });
-  
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { coupons, createCoupon, updateCoupon, deleteCoupon, loading, refresh } = useCoupons();
+  const { promotions } = usePromotions();
+  const { auditLog }   = useAudit();
+  const { showToast }  = useToast();
 
-  // Filtrar cupones
+  const [isDialogOpen, setIsDialogOpen]   = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [statusFilter, setStatusFilter]   = useState<CouponStatusFilter>('ALL');
+  const [searchQuery, setSearchQuery]     = useState('');
+  const [formData, setFormData]           = useState(EMPTY_FORM);
+  const [errors, setErrors]               = useState<Record<string, string>>({});
+  const [submitting, setSubmitting]       = useState(false);
+
+  // Solo promos disponibles para vincular a un cupón
+  // Mostramos todas (el admin decide), pero marcamos las que son couponRequired
+  const availablePromos = useMemo(() =>
+    (Array.isArray(promotions) ? promotions : [])
+      .filter(p => p.status !== 'EXPIRED')
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [promotions],
+  );
+
+  // ── Filtros ──────────────────────────────────────────────────────────────────
   const filteredCoupons = useMemo(() => {
-let result = Array.isArray(coupons) ? coupons.filter(c => !c.code.includes('__archived__')) : [];
-    
-    // Filtrar por búsqueda
+    let result = Array.isArray(coupons) ? coupons : [];
+
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(coupon =>
-        coupon.code.toLowerCase().includes(query)
-      );
+      const q = searchQuery.toUpperCase();
+      result = result.filter(c => c.code.includes(q));
     }
-    
-    // Filtrar por estado
     if (statusFilter !== 'ALL') {
-      result = result.filter(coupon => {
-        const status = getPromotionStatus(coupon.isActive, coupon.startsAt, coupon.endsAt);
-        return status === statusFilter;
-      });
+      result = result.filter(c => getCouponStatus(c) === statusFilter);
     }
-    
-    return result.sort((a, b) => 
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    return result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [coupons, searchQuery, statusFilter]);
 
+  // ── Dialog ───────────────────────────────────────────────────────────────────
   const openCreateDialog = () => {
     setEditingCoupon(null);
-    setFormData({
-      code: '',
-      type: 'PERCENT',
-      value: '',
-      minSubtotal: '',
-      startsAt: '',
-      endsAt: '',
-      usageLimit: '',
-      isActive: true,
-      scopeAll: true,
-      scopeCategoryIds: [],
-      scopeProductIds: [],
-      stackable: false,
-    });
+    setFormData(EMPTY_FORM);
     setErrors({});
     setIsDialogOpen(true);
   };
@@ -117,231 +115,134 @@ let result = Array.isArray(coupons) ? coupons.filter(c => !c.code.includes('__ar
   const openEditDialog = (coupon: Coupon) => {
     setEditingCoupon(coupon);
     setFormData({
-      code: coupon.code,
-      type: coupon.type,
-      value: coupon.value.toString(),
-      minSubtotal: coupon.minSubtotal ? coupon.minSubtotal.toString() : '',
-      startsAt: coupon.startsAt ? coupon.startsAt.split('T')[0] : '',
-      endsAt: coupon.endsAt ? coupon.endsAt.split('T')[0] : '',
-      usageLimit: coupon.usageLimit ? coupon.usageLimit.toString() : '',
-      isActive: coupon.isActive,
-      scopeAll: coupon.scope.all,
-      scopeCategoryIds: coupon.scope.categoryIds || [],
-      scopeProductIds: coupon.scope.productIds || [],
-      stackable: coupon.stackable,
+      code:             coupon.code,
+      promotionId:      coupon.promotionId,
+      startsAt:         coupon.startsAt ? coupon.startsAt.split('T')[0] : '',
+      endsAt:           coupon.endsAt   ? coupon.endsAt.split('T')[0]   : '',
+      usageLimit:       coupon.usageLimit != null ? String(coupon.usageLimit) : '',
+      perCustomerLimit: String(coupon.perCustomerLimit ?? 1),
+      isActive:         coupon.isActive,
     });
     setErrors({});
     setIsDialogOpen(true);
   };
 
+  // ── Validación ───────────────────────────────────────────────────────────────
   const validateForm = (): boolean => {
-  const newErrors: Record<string, string> = {};
+    const errs: Record<string, string> = {};
 
-  // Código (solo formato)
-  const codeValidation = validateCouponCode(formData.code);
-  if (!codeValidation.valid) {
-    newErrors.code = codeValidation.error!;
-  }
+    const code = formData.code.trim().toUpperCase();
+    if (!code) errs.code = 'El código es requerido';
+    else if (/\s/.test(code)) errs.code = 'El código no puede contener espacios';
 
-  // Valor
-  const value = parseFloat(formData.value);
-  if (isNaN(value)) {
-    newErrors.value = 'El valor debe ser un número';
-  } else if (formData.type === 'PERCENT' && (value < 1 || value > 90)) {
-    newErrors.value = 'El porcentaje debe estar entre 1 y 90';
-  } else if (formData.type === 'FIXED' && value <= 0) {
-    newErrors.value = 'El monto debe ser mayor a 0';
-  }
+    if (!formData.promotionId) errs.promotionId = 'Debes seleccionar una promoción';
 
-  // minSubtotal
-  if (formData.minSubtotal) {
-    const minSubtotal = parseFloat(formData.minSubtotal);
-    if (isNaN(minSubtotal) || minSubtotal < 0) {
-      newErrors.minSubtotal = 'El subtotal mínimo debe ser un número válido';
+    if (formData.usageLimit) {
+      const n = parseInt(formData.usageLimit);
+      if (isNaN(n) || n < 1) errs.usageLimit = 'Debe ser un número mayor a 0';
     }
-  }
 
-  // usageLimit
-  if (formData.usageLimit) {
-    const usageLimit = parseInt(formData.usageLimit, 10);
-    if (isNaN(usageLimit) || usageLimit < 1) {
-      newErrors.usageLimit = 'El límite de usos debe ser un entero mayor a 0';
+    if (formData.startsAt && formData.endsAt &&
+        new Date(formData.endsAt) <= new Date(formData.startsAt)) {
+      errs.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
     }
-  }
 
-  // Fechas
-  if (formData.startsAt && formData.endsAt) {
-    if (new Date(formData.endsAt) <= new Date(formData.startsAt)) {
-      newErrors.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
-    }
-  }
-
-  // Alcance
-  if (!formData.scopeAll && formData.scopeCategoryIds.length === 0 && formData.scopeProductIds.length === 0) {
-    newErrors.scope = 'Debes seleccionar al menos una categoría o producto';
-  }
-
-  setErrors(newErrors);
-  return Object.keys(newErrors).length === 0;
-};
-
-const handleSubmit = async () => {
-  if (!validateForm()) return;
-
-  const scope: PromotionScope = {
-    all: formData.scopeAll,
-    categoryIds: formData.scopeAll ? undefined : formData.scopeCategoryIds,
-    productIds: formData.scopeAll ? undefined : formData.scopeProductIds,
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
-  const couponData = {
-    code: formData.code.trim().toUpperCase(),
-    type: formData.type,
-    value: parseFloat(formData.value),
-    minSubtotal: formData.minSubtotal ? parseFloat(formData.minSubtotal) : undefined,
-    startsAt: formData.startsAt ? new Date(formData.startsAt).toISOString() : undefined,
-    endsAt: formData.endsAt ? new Date(formData.endsAt).toISOString() : undefined,
-    usageLimit: formData.usageLimit ? parseInt(formData.usageLimit, 10) : undefined,
-    isActive: formData.isActive,
-    scope,
-    stackable: formData.stackable,
+  // ── Submit ───────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+    setSubmitting(true);
+
+    const dto: CreateCouponDto = {
+      code:             formData.code.trim().toUpperCase(),
+      promotionId:      formData.promotionId,
+      isActive:         formData.isActive,
+      startsAt:         formData.startsAt ? new Date(formData.startsAt).toISOString() : undefined,
+      endsAt:           formData.endsAt   ? new Date(formData.endsAt).toISOString()   : undefined,
+      usageLimit:       formData.usageLimit ? parseInt(formData.usageLimit) : undefined,
+      perCustomerLimit: parseInt(formData.perCustomerLimit) || 1,
+    };
+
+    try {
+      setErrors({});
+      if (editingCoupon) {
+        await updateCoupon(editingCoupon.id, dto);
+        auditLog({
+          action: 'COUPON_UPDATED',
+          entity: { type: 'coupon', id: editingCoupon.id, label: dto.code },
+          changes: [],
+        });
+        showToast('success', 'Cupón actualizado correctamente');
+      } else {
+        const created = await createCoupon(dto);
+        auditLog({
+          action: 'COUPON_CREATED',
+          entity: { type: 'coupon', id: created.id, label: created.code },
+          changes: [],
+        });
+        showToast('success', 'Cupón creado correctamente');
+      }
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      showToast('fail', err?.message ?? 'No se pudo guardar el cupón');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  try {
-    setErrors({});
-
-    if (editingCoupon) {
-      await updateCoupon(editingCoupon.id, couponData);
+  const handleToggle = async (coupon: Coupon) => {
+    try {
+      await updateCoupon(coupon.id, { isActive: !coupon.isActive });
       auditLog({
-        action: 'COUPON_UPDATED',
-        entity: { type: 'coupon', id: editingCoupon.id, label: couponData.code },
-        changes: [{ field: 'coupon', oldValue: editingCoupon.code, newValue: couponData.code }]
+        action: 'COUPON_TOGGLED',
+        entity: { type: 'coupon', id: coupon.id, label: coupon.code },
+        changes: [{ field: 'isActive', oldValue: String(coupon.isActive), newValue: String(!coupon.isActive) }],
       });
-      showToast('success', 'Cupón actualizado correctamente');
-    } else {
-      const newCoupon = await createCoupon(couponData);
-      auditLog({
-        action: 'COUPON_CREATED',
-        entity: { type: 'coupon', id: newCoupon.id, label: newCoupon.code },
-        changes: []
-      });
-      showToast('success', 'Cupón creado correctamente');
+      showToast('success', `Cupón ${!coupon.isActive ? 'activado' : 'desactivado'}`);
+    } catch (err: any) {
+      showToast('fail', err?.message ?? 'No se pudo cambiar el estado');
     }
-
-    setIsDialogOpen(false);
-
-  } catch (err: any) {
-    // Esperamos tu ApiError con shape { message, details? }
-    // Recomendación BE: details.fieldErrors = { code: "...", value: "...", ... }
-    const fieldErrors = err?.details?.fieldErrors;
-
-    if (fieldErrors && typeof fieldErrors === "object") {
-      setErrors(fieldErrors);
-      showToast('fail', err?.message ?? 'Revisa el formulario');
-      return;
-    }
-
-    // Duplicado típico: code ya existe
-    // Recomendación BE: status 409 + fieldErrors.code
-    showToast('fail', err?.message ?? 'No se pudo guardar el cupón');
-  }
-};
-  const handleToggle = (coupon: Coupon) => {
-    toggleCoupon(coupon.id);
-    auditLog({
-      action: 'COUPON_TOGGLED',
-      entity: {
-        type: 'coupon',
-        id: coupon.id,
-        label: coupon.code,
-      },
-      changes: [
-        { field: 'isActive', oldValue: coupon.isActive.toString(), newValue: (!coupon.isActive).toString() }
-      ]
-    });
-    showToast('success',`Cupón ${!coupon.isActive ? 'activado' : 'desactivado'}`);
   };
 
-  const handleDelete = (coupon: Coupon) => {
-    if (confirm('¿Estás seguro de eliminar este cupón?')) {
-      deleteCoupon(coupon.id);
+  const handleDelete = async (coupon: Coupon) => {
+    if (!confirm(`¿Eliminar el cupón "${coupon.code}"?`)) return;
+    try {
+      await deleteCoupon(coupon.id);
       auditLog({
         action: 'COUPON_DELETED',
-        entity: {
-          type: 'coupon',
-          id: coupon.id,
-          label: coupon.code,
-        },
-        changes: []
+        entity: { type: 'coupon', id: coupon.id, label: coupon.code },
+        changes: [],
       });
-      showToast('success','Cupón eliminado correctamente');
+      showToast('success', 'Cupón eliminado');
+    } catch (err: any) {
+      showToast('fail', err?.message ?? 'No se pudo eliminar el cupón');
     }
   };
 
-  const handleResetUsage = (coupon: Coupon) => {
-    if (confirm('¿Estás seguro de reiniciar el contador de usos?')) {
-      resetUsageCount(coupon.id);
-      auditLog({
-        action: 'COUPON_RESET_USEDCOUNT',
-        entity: {
-          type: 'coupon',
-          id: coupon.id,
-          label: coupon.code,
-        },
-        changes: [
-          { field: 'usedCount', oldValue: coupon.usedCount.toString(), newValue: '0' }
-        ]
-      });
-      showToast('success','Contador reiniciado correctamente');
-    }
-  };
+  const set = (key: keyof typeof EMPTY_FORM) => (val: any) =>
+    setFormData(prev => ({ ...prev, [key]: val }));
 
-  const getStatusBadge = (coupon: Coupon) => {
-    const status = getPromotionStatus(coupon.isActive, coupon.startsAt, coupon.endsAt);
-    
-    const variants = {
-      ACTIVE: { label: 'Activo', variant: 'default' as const },
-      SCHEDULED: { label: 'Programado', variant: 'secondary' as const },
-      EXPIRED: { label: 'Expirado', variant: 'outline' as const },
-      INACTIVE: { label: 'Inactivo', variant: 'outline' as const },
-    };
-    
-    const config = variants[status];
-    return <Badge variant={config.variant}>{config.label}</Badge>;
-  };
-
-  const getScopeLabel = (scope: PromotionScope) => {
-    if (scope.all) return 'Todos los productos';
-    
-    const parts: string[] = [];
-    if (scope.categoryIds && scope.categoryIds.length > 0) {
-      parts.push(`${scope.categoryIds.length} categorías`);
-    }
-    if (scope.productIds && scope.productIds.length > 0) {
-      parts.push(`${scope.productIds.length} productos`);
-    }
-    
-    return parts.join(', ') || 'Sin alcance';
-  };
-
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
-<div className="flex items-center justify-between">
-  <div>
-    <h1 className="text-2xl">Cupones</h1>
-    <p className="text-muted-foreground text-sm mt-1">
-      Gestiona códigos de descuento para tus clientes
-    </p>
-  </div>
-  <div className="flex items-center gap-3">
-    <RefreshButton status={status} lastFetch={lastFetch} onRefresh={refresh} />
-    <Button onClick={openCreateDialog}>
-      <Plus className="size-4" />
-      Nuevo Cupón
-    </Button>
-  </div>
-</div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl">Cupones</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Gestiona códigos de descuento para tus clientes
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <RefreshButton status={loading ? 'loading' : 'success'} lastFetch={null} onRefresh={refresh} />
+          <Button onClick={openCreateDialog}>
+            <Plus className="size-4" /> Nuevo Cupón
+          </Button>
+        </div>
+      </div>
 
       {/* Filtros */}
       <div className="flex gap-4">
@@ -349,10 +250,10 @@ const handleSubmit = async () => {
           <Input
             placeholder="Buscar por código..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={e => setSearchQuery(e.target.value)}
           />
         </div>
-        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as PromotionStatus | 'ALL')}>
+        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as CouponStatusFilter)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
@@ -374,135 +275,106 @@ const handleSubmit = async () => {
           <p className="text-muted-foreground text-sm mb-6">
             {searchQuery || statusFilter !== 'ALL'
               ? 'No se encontraron cupones con los filtros aplicados'
-              : 'Crea tu primer cupón para ofrecer descuentos con código'}
+              : 'Crea tu primer cupón de descuento'}
           </p>
           {!searchQuery && statusFilter === 'ALL' && (
             <Button onClick={openCreateDialog}>
-              <Plus className="size-4" />
-              Crear Cupón
+              <Plus className="size-4" /> Crear Cupón
             </Button>
           )}
         </div>
       ) : (
-        <div className="border rounded-lg overflow-x-auto">
+        <div className="border rounded-lg">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Código</TableHead>
-                <TableHead>Descuento</TableHead>
+                <TableHead>Promoción vinculada</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Min. Subtotal</TableHead>
-                <TableHead>Usos</TableHead>
                 <TableHead>Vigencia</TableHead>
-                <TableHead>Alcance</TableHead>
+                <TableHead>Usos</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCoupons.map((coupon) => (
-                <TableRow key={coupon.id}>
-                  <TableCell>
-                    <code className="font-mono font-medium bg-muted px-2 py-1 rounded">
-                      {coupon.code}
-                    </code>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium">
-                      {coupon.type === 'PERCENT' ? `${coupon.value}%` : `$${coupon.value.toFixed(2)}`}
-                    </span>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(coupon)}</TableCell>
-                  <TableCell className="text-sm">
-                    {coupon.minSubtotal ? (
-                      <span>${coupon.minSubtotal.toFixed(2)}</span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {coupon.usageLimit ? (
-                      <span>
-                        {coupon.usedCount} / {coupon.usageLimit}
-                      </span>
-                    ) : (
-                      <span>{coupon.usedCount} / ∞</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {coupon.startsAt || coupon.endsAt ? (
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <Calendar className="size-3" />
-                        <span>
+              {filteredCoupons.map(coupon => {
+                const linkedPromo = promotions.find(p => p.id === coupon.promotionId);
+                return (
+                  <TableRow key={coupon.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Hash className="size-3 text-muted-foreground" />
+                        <span className="font-mono font-semibold">{coupon.code}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {linkedPromo ? (
+                        <div className="space-y-0.5">
+                          <div className="font-medium">{linkedPromo.name}</div>
+                          <div className="text-muted-foreground">
+                            {linkedPromo.type === 'PERCENT'
+                              ? `${linkedPromo.value}% de descuento`
+                              : `$${linkedPromo.value.toFixed(2)} de descuento`}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Promo no encontrada</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(coupon)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {coupon.startsAt || coupon.endsAt ? (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="size-3" />
                           {coupon.startsAt ? new Date(coupon.startsAt).toLocaleDateString() : '∞'}
                           {' - '}
                           {coupon.endsAt ? new Date(coupon.endsAt).toLocaleDateString() : '∞'}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Sin límite</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <Target className="size-3" />
-                      {getScopeLabel(coupon.scope)}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex gap-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(coupon)}
-                      >
-                        <Edit className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggle(coupon)}
-                      >
-                        {coupon.isActive ? (
-                          <PowerOff className="size-4" />
-                        ) : (
-                          <Power className="size-4" />
-                        )}
-                      </Button>
-                      {hasPermission('user:manage') && coupon.usedCount > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleResetUsage(coupon)}
-                          title="Reiniciar contador"
-                        >
-                          <RotateCcw className="size-4" />
-                        </Button>
+                        </div>
+                      ) : (
+                        <span>Sin límite</span>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(coupon)}
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      <span className="font-medium">{coupon.usedCount}</span>
+                      {coupon.usageLimit != null && (
+                        <span className="text-muted-foreground"> / {coupon.usageLimit}</span>
+                      )}
+                      {coupon.usageLimit == null && (
+                        <span className="text-muted-foreground"> / ∞</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(coupon)}>
+                          <Edit className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleToggle(coupon)}>
+                          {coupon.isActive
+                            ? <PowerOff className="size-4" />
+                            : <Power className="size-4" />}
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(coupon)}>
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
       )}
 
-      {/* Dialog */}
+      {/* Dialog create/edit */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {editingCoupon ? 'Editar Cupón' : 'Nuevo Cupón'}
-            </DialogTitle>
+            <DialogTitle>{editingCoupon ? 'Editar Cupón' : 'Nuevo Cupón'}</DialogTitle>
             <DialogDescription>
-              {editingCoupon ? 'Modifica los detalles del cupón' : 'Crea un nuevo código de descuento'}
+              {editingCoupon
+                ? 'Modifica los detalles del cupón'
+                : 'Crea un nuevo código de descuento'}
             </DialogDescription>
           </DialogHeader>
 
@@ -513,212 +385,111 @@ const handleSubmit = async () => {
               <Input
                 id="code"
                 value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                onChange={e => set('code')(e.target.value.toUpperCase().replace(/\s/g, ''))}
                 placeholder="Ej: VERANO2026"
-                maxLength={20}
+                disabled={!!editingCoupon}  // el código no se puede cambiar una vez creado
                 className="font-mono"
               />
-              {errors.code && <p className="text-sm text-destructive">{errors.code}</p>}
               <p className="text-xs text-muted-foreground">
                 El código será convertido a mayúsculas y sin espacios
               </p>
+              {errors.code && <p className="text-sm text-destructive">{errors.code}</p>}
             </div>
 
-            {/* Tipo y Valor */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="type">Tipo de Descuento *</Label>
-                <Select 
-                  value={formData.type} 
-                  onValueChange={(value: DiscountType) => setFormData({ ...formData, type: value })}
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PERCENT">Porcentaje (%)</SelectItem>
-                    <SelectItem value="FIXED">Monto Fijo ($)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="value">Valor *</Label>
-                <Input
-                  id="value"
-                  type="number"
-                  value={formData.value}
-                  onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                  placeholder={formData.type === 'PERCENT' ? '1-90' : '0.00'}
-                  step={formData.type === 'PERCENT' ? '1' : '0.01'}
-                />
-                {errors.value && <p className="text-sm text-destructive">{errors.value}</p>}
-              </div>
-            </div>
-
-            {/* Subtotal mínimo y límite de usos */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="minSubtotal">Subtotal Mínimo</Label>
-                <Input
-                  id="minSubtotal"
-                  type="number"
-                  value={formData.minSubtotal}
-                  onChange={(e) => setFormData({ ...formData, minSubtotal: e.target.value })}
-                  placeholder="0.00"
-                  step="0.01"
-                />
-                {errors.minSubtotal && <p className="text-sm text-destructive">{errors.minSubtotal}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="usageLimit">Límite de Usos</Label>
-                <Input
-                  id="usageLimit"
-                  type="number"
-                  value={formData.usageLimit}
-                  onChange={(e) => setFormData({ ...formData, usageLimit: e.target.value })}
-                  placeholder="Ilimitado"
-                  step="1"
-                  min="1"
-                />
-                {errors.usageLimit && <p className="text-sm text-destructive">{errors.usageLimit}</p>}
-              </div>
+            {/* Promoción vinculada */}
+            <div className="space-y-2">
+              <Label>Promoción vinculada *</Label>
+              <Select value={formData.promotionId} onValueChange={set('promotionId')}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una promoción..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availablePromos.length === 0 ? (
+                    <SelectItem value="" disabled>
+                      No hay promociones disponibles
+                    </SelectItem>
+                  ) : (
+                    availablePromos.map(promo => (
+                      <SelectItem key={promo.id} value={promo.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{promoLabel(promo)}</span>
+                          {promo.couponRequired && (
+                            <Badge variant="secondary" className="text-xs">Exclusiva</Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {formData.promotionId && (() => {
+                const p = promotions.find(x => x.id === formData.promotionId);
+                if (!p) return null;
+                return (
+                  <div className="text-xs text-muted-foreground bg-muted rounded p-2 space-y-0.5">
+                    <div><span className="font-medium">Descuento:</span> {p.type === 'PERCENT' ? `${p.value}%` : `$${p.value.toFixed(2)}`}</div>
+                    {p.minSubtotal ? <div><span className="font-medium">Subtotal mín:</span> ${p.minSubtotal.toFixed(2)}</div> : null}
+                    {p.maxDiscountPct ? <div><span className="font-medium">Techo:</span> {p.maxDiscountPct}%</div> : null}
+                    <div><span className="font-medium">Alcance:</span> {p.scope.all ? 'Todos los productos' : 'Específico'}</div>
+                  </div>
+                );
+              })()}
+              {errors.promotionId && <p className="text-sm text-destructive">{errors.promotionId}</p>}
             </div>
 
             {/* Vigencia */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startsAt">Fecha de Inicio</Label>
-                <Input
-                  id="startsAt"
-                  type="date"
-                  value={formData.startsAt}
-                  onChange={(e) => setFormData({ ...formData, startsAt: e.target.value })}
-                />
+                <Label>Fecha de Inicio</Label>
+                <Input type="date" value={formData.startsAt} onChange={e => set('startsAt')(e.target.value)} />
+                <p className="text-xs text-muted-foreground">Estrecha las fechas de la promo</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endsAt">Fecha de Fin</Label>
-                <Input
-                  id="endsAt"
-                  type="date"
-                  value={formData.endsAt}
-                  onChange={(e) => setFormData({ ...formData, endsAt: e.target.value })}
-                />
+                <Label>Fecha de Fin</Label>
+                <Input type="date" value={formData.endsAt} onChange={e => set('endsAt')(e.target.value)} />
                 {errors.endsAt && <p className="text-sm text-destructive">{errors.endsAt}</p>}
               </div>
             </div>
 
-            {/* Alcance */}
-            <div className="space-y-2">
-              <Label>Alcance *</Label>
+            {/* Límites */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={formData.scopeAll}
-                    onChange={() => setFormData({ ...formData, scopeAll: true })}
-                  />
-                  <span>Todos los productos</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={!formData.scopeAll}
-                    onChange={() => setFormData({ ...formData, scopeAll: false })}
-                  />
-                  <span>Productos/Categorías específicas</span>
-                </label>
+                <Label>Límite de usos <span className="text-muted-foreground">(global)</span></Label>
+                <Input
+                  type="number"
+                  value={formData.usageLimit}
+                  onChange={e => set('usageLimit')(e.target.value)}
+                  placeholder="Ilimitado"
+                  min="1"
+                />
+                {errors.usageLimit && <p className="text-sm text-destructive">{errors.usageLimit}</p>}
               </div>
-              {errors.scope && <p className="text-sm text-destructive">{errors.scope}</p>}
+              <div className="space-y-2">
+                <Label>Usos por cliente</Label>
+                <Input
+                  type="number"
+                  value={formData.perCustomerLimit}
+                  onChange={e => set('perCustomerLimit')(e.target.value)}
+                  min="1"
+                />
+              </div>
             </div>
 
-            {/* Selección de categorías/productos */}
-            {!formData.scopeAll && (
-              <div className="space-y-4 pl-6 border-l-2">
-                <div className="space-y-2">
-                  <Label>Categorías</Label>
-                  <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {(Array.isArray(categories) ? categories : []).filter(c => !c.isArchived).map(cat => (
-                      <label key={cat.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.scopeCategoryIds.includes(cat.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                scopeCategoryIds: [...formData.scopeCategoryIds, cat.id]
-                              });
-                            } else {
-                              setFormData({
-                                ...formData,
-                                scopeCategoryIds: formData.scopeCategoryIds.filter(id => id !== cat.id)
-                              });
-                            }
-                          }}
-                        />
-                        <span className="text-sm">{cat.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Productos</Label>
-                  <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                    {(Array.isArray(products) ? products : []).filter(p => !p.isArchived).map(prod => (
-                      <label key={prod.id} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.scopeProductIds.includes(prod.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                scopeProductIds: [...formData.scopeProductIds, prod.id]
-                              });
-                            } else {
-                              setFormData({
-                                ...formData,
-                                scopeProductIds: formData.scopeProductIds.filter(id => id !== prod.id)
-                              });
-                            }
-                          }}
-                        />
-                        <span className="text-sm">{prod.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Opciones adicionales */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.stackable}
-                  onChange={(e) => setFormData({ ...formData, stackable: e.target.checked })}
-                />
-                <span>Permitir acumulación con promociones</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                />
-                <span>Activar inmediatamente</span>
-              </label>
-            </div>
+            {/* Activar */}
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={formData.isActive}
+                onChange={e => set('isActive')(e.target.checked)}
+              />
+              <span>Activar inmediatamente</span>
+            </label>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSubmit}>
-              {editingCoupon ? 'Actualizar' : 'Crear'} Cupón
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Guardando...' : (editingCoupon ? 'Actualizar' : 'Crear')} Cupón
             </Button>
           </DialogFooter>
         </DialogContent>

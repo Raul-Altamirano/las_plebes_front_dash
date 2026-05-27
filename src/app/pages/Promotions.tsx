@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Edit, Power, PowerOff, Trash2, Tag, Calendar, Target } from 'lucide-react';
+import { Plus, Edit, Power, PowerOff, Trash2, Tag, Calendar, Target, AlertTriangle } from 'lucide-react';
 import { usePromotions } from '../store/PromotionsContext';
 import { useCategories } from '../store/CategoryContext';
 import { useProducts } from '../store/ProductsContext';
@@ -11,196 +11,222 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { RefreshButton } from '../components/RefreshButton';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
-import { getPromotionStatus } from '../utils/promotionHelpers';
-import type { Promotion, DiscountType, PromotionScope, PromotionStatus } from '../types/promotion';
+import type { Promotion, DiscountType, PromotionScope, PromotionStatus, PromotionWarning } from '../types/promotion';
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<PromotionStatus, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+  ACTIVE:    { label: 'Activa',      variant: 'default'   },
+  SCHEDULED: { label: 'Programada',  variant: 'secondary' },
+  EXPIRED:   { label: 'Expirada',    variant: 'outline'   },
+  INACTIVE:  { label: 'Inactiva',    variant: 'outline'   },
+};
+
+function getStatusBadge(promo: Promotion) {
+  const config = STATUS_CONFIG[promo.status] ?? STATUS_CONFIG.INACTIVE;
+  return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+function getScopeLabel(scope: PromotionScope) {
+  if (scope.all) return 'Todos los productos';
+  const parts: string[] = [];
+  if (scope.categoryIds?.length) parts.push(`${scope.categoryIds.length} categorías`);
+  if (scope.productIds?.length)  parts.push(`${scope.productIds.length} productos`);
+  return parts.join(', ') || 'Sin alcance';
+}
+
+// ── Tipos de formulario ───────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  name:             '',
+  type:             'PERCENT' as DiscountType,
+  value:            '',
+  startsAt:         '',
+  endsAt:           '',
+  isActive:         true,
+  couponRequired:   false,
+  stackable:        false,
+  scopeAll:         true,
+  scopeCategoryIds: [] as string[],
+  scopeProductIds:  [] as string[],
+  // avanzados
+  minSubtotal:      '',
+  minDiscountPct:   '',
+  maxDiscountPct:   '',
+};
+
+// ── Componente ────────────────────────────────────────────────────────────────
 
 export default function Promotions() {
   const {
-    promotions,
-    createPromotion,
-    updatePromotion,
-    togglePromotion,
-    deletePromotion,
-    status,
-    lastFetch,
-    refresh,
+    promotions, createPromotion, updatePromotion,
+    togglePromotion, deletePromotion, status, lastFetch, refresh,
   } = usePromotions();
   const { categories } = useCategories();
-  const { products } = useProducts();
-  const { auditLog } = useAudit();
-  const { showToast } = useToast();
+  const { products }   = useProducts();
+  const { auditLog }   = useAudit();
+  const { showToast }  = useToast();
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
-  const [statusFilter, setStatusFilter] = useState<PromotionStatus | 'ALL'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [isDialogOpen, setIsDialogOpen]         = useState(false);
+  const [editingPromo, setEditingPromo]          = useState<Promotion | null>(null);
+  const [statusFilter, setStatusFilter]          = useState<PromotionStatus | 'ALL'>('ALL');
+  const [searchQuery, setSearchQuery]            = useState('');
+  const [showAdvanced, setShowAdvanced]          = useState(false);
+  const [formData, setFormData]                  = useState(EMPTY_FORM);
+  const [errors, setErrors]                      = useState<Record<string, string>>({});
+  const [submitting, setSubmitting]              = useState(false);
+  const [activeWarnings, setActiveWarnings]      = useState<PromotionWarning[]>([]);
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    type: 'PERCENT' as DiscountType,
-    value: '',
-    startsAt: '',
-    endsAt: '',
-    isActive: true,
-    scopeAll: true,
-    scopeCategoryIds: [] as string[],
-    scopeProductIds: [] as string[],
-    stackable: false,
-  });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Filtrar promociones
+  // ── Filtros ──────────────────────────────────────────────────────────────────
   const filteredPromotions = useMemo(() => {
-    let result = Array.isArray(promotions)
-      ? promotions.filter(p => !p.name.includes('__archived__'))
-      : [];
+    let result = (Array.isArray(promotions) ? promotions : [])
+      .filter(p => !p.name.includes('__archived__'));
 
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(p => p.name.toLowerCase().includes(query));
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => p.name.toLowerCase().includes(q));
     }
-
     if (statusFilter !== 'ALL') {
-      result = result.filter(p => {
-        const s = getPromotionStatus(p.isActive, p.startsAt, p.endsAt);
-        return s === statusFilter;
-      });
+      result = result.filter(p => p.status === statusFilter);
     }
-
-    return result.sort((a, b) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    return result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [promotions, searchQuery, statusFilter]);
 
+  // ── Dialog ───────────────────────────────────────────────────────────────────
   const openCreateDialog = () => {
     setEditingPromo(null);
-    setFormData({
-      name: '',
-      type: 'PERCENT',
-      value: '',
-      startsAt: '',
-      endsAt: '',
-      isActive: true,
-      scopeAll: true,
-      scopeCategoryIds: [],
-      scopeProductIds: [],
-      stackable: false,
-    });
+    setFormData(EMPTY_FORM);
     setErrors({});
+    setActiveWarnings([]);
+    setShowAdvanced(false);
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (promo: Promotion) => {
     setEditingPromo(promo);
     setFormData({
-      name: promo.name,
-      type: promo.type,
-      value: promo.value.toString(),
-      startsAt: promo.startsAt ? promo.startsAt.split('T')[0] : '',
-      endsAt: promo.endsAt ? promo.endsAt.split('T')[0] : '',
-      isActive: promo.isActive,
-      scopeAll: promo.scope.all,
-      scopeCategoryIds: promo.scope.categoryIds || [],
-      scopeProductIds: promo.scope.productIds || [],
-      stackable: promo.stackable,
+      name:             promo.name,
+      type:             promo.type as DiscountType,
+      value:            promo.value.toString(),
+      startsAt:         promo.startsAt ? promo.startsAt.split('T')[0] : '',
+      endsAt:           promo.endsAt   ? promo.endsAt.split('T')[0]   : '',
+      isActive:         promo.isActive,
+      couponRequired:   promo.couponRequired,
+      stackable:        promo.stackable,
+      scopeAll:         promo.scope.all,
+      scopeCategoryIds: promo.scope.categoryIds ?? [],
+      scopeProductIds:  promo.scope.productIds  ?? [],
+      minSubtotal:      promo.minSubtotal    != null ? String(promo.minSubtotal)    : '',
+      minDiscountPct:   promo.minDiscountPct != null ? String(promo.minDiscountPct) : '',
+      maxDiscountPct:   promo.maxDiscountPct != null ? String(promo.maxDiscountPct) : '',
     });
     setErrors({});
+    setActiveWarnings([]);
+    setShowAdvanced(!!(promo.minSubtotal || promo.minDiscountPct || promo.maxDiscountPct));
     setIsDialogOpen(true);
   };
 
+  // ── Validación ───────────────────────────────────────────────────────────────
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
+    const errs: Record<string, string> = {};
+    if (!formData.name.trim()) errs.name = 'El nombre es requerido';
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'El nombre es requerido';
+    const val = parseFloat(formData.value);
+    if (isNaN(val)) {
+      errs.value = 'El valor debe ser un número';
+    } else if (formData.type === 'PERCENT' && (val < 1 || val > 90)) {
+      errs.value = 'El porcentaje debe estar entre 1 y 90';
+    } else if (formData.type === 'FIXED' && val <= 0) {
+      errs.value = 'El monto debe ser mayor a 0';
     }
 
-    const value = parseFloat(formData.value);
-    if (isNaN(value)) {
-      newErrors.value = 'El valor debe ser un número';
-    } else if (formData.type === 'PERCENT' && (value < 1 || value > 90)) {
-      newErrors.value = 'El porcentaje debe estar entre 1 y 90';
-    } else if (formData.type === 'FIXED' && value <= 0) {
-      newErrors.value = 'El monto debe ser mayor a 0';
+    if (formData.startsAt && formData.endsAt &&
+        new Date(formData.endsAt) <= new Date(formData.startsAt)) {
+      errs.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
     }
 
-    if (formData.startsAt && formData.endsAt) {
-      if (new Date(formData.endsAt) <= new Date(formData.startsAt)) {
-        newErrors.endsAt = 'La fecha de fin debe ser posterior a la de inicio';
-      }
+    if (!formData.scopeAll &&
+        formData.scopeCategoryIds.length === 0 &&
+        formData.scopeProductIds.length  === 0) {
+      errs.scope = 'Selecciona al menos una categoría o producto';
     }
 
-    if (!formData.scopeAll && formData.scopeCategoryIds.length === 0 && formData.scopeProductIds.length === 0) {
-      newErrors.scope = 'Debes seleccionar al menos una categoría o producto';
+    // Validaciones campos avanzados
+    const minPct = parseFloat(formData.minDiscountPct);
+    const maxPct = parseFloat(formData.maxDiscountPct);
+    if (formData.minDiscountPct && isNaN(minPct)) errs.minDiscountPct = 'Debe ser un número';
+    if (formData.maxDiscountPct && isNaN(maxPct)) errs.maxDiscountPct = 'Debe ser un número';
+    if (!isNaN(minPct) && !isNaN(maxPct) && minPct >= maxPct) {
+      errs.maxDiscountPct = 'El techo debe ser mayor al piso';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
+  // ── Submit ───────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!validateForm()) return;
+    setSubmitting(true);
 
     const scope: PromotionScope = {
-      all: formData.scopeAll,
+      all:         formData.scopeAll,
       categoryIds: formData.scopeAll ? undefined : formData.scopeCategoryIds,
-      productIds: formData.scopeAll ? undefined : formData.scopeProductIds,
+      productIds:  formData.scopeAll ? undefined : formData.scopeProductIds,
     };
 
-    const promoData = {
-      name: formData.name.trim(),
-      type: formData.type,
-      value: parseFloat(formData.value),
-      startsAt: formData.startsAt ? new Date(formData.startsAt).toISOString() : undefined,
-      endsAt: formData.endsAt ? new Date(formData.endsAt).toISOString() : undefined,
-      isActive: formData.isActive,
+    const dto = {
+      name:           formData.name.trim(),
+      type:           formData.type,
+      value:          parseFloat(formData.value),
+      isActive:       formData.isActive,
+      couponRequired: formData.couponRequired,
+      stackable:      formData.stackable,
+      startsAt:       formData.startsAt ? new Date(formData.startsAt).toISOString() : undefined,
+      endsAt:         formData.endsAt   ? new Date(formData.endsAt).toISOString()   : undefined,
       scope,
-      stackable: formData.stackable,
+      minSubtotal:    formData.minSubtotal    ? parseFloat(formData.minSubtotal)    : undefined,
+      minDiscountPct: formData.minDiscountPct ? parseFloat(formData.minDiscountPct) : undefined,
+      maxDiscountPct: formData.maxDiscountPct ? parseFloat(formData.maxDiscountPct) : undefined,
     };
 
     try {
       setErrors({});
+      let warnings: PromotionWarning[] | undefined;
 
       if (editingPromo) {
-        await updatePromotion(editingPromo.id, promoData);
+        const result = await updatePromotion(editingPromo.id, dto);
+        warnings = result.warnings;
         auditLog({
           action: 'PROMO_UPDATED',
-          entity: { type: 'promotion', id: editingPromo.id, label: promoData.name },
-          changes: [{ field: 'promotion', oldValue: editingPromo.name, newValue: promoData.name }],
+          entity: { type: 'promotion', id: editingPromo.id, label: dto.name },
+          changes: [{ field: 'promotion', oldValue: editingPromo.name, newValue: dto.name }],
         });
         showToast('success', 'Promoción actualizada correctamente');
       } else {
-        const newPromo = await createPromotion(promoData);
+        const result = await createPromotion(dto);
+        warnings = result.warnings;
         auditLog({
           action: 'PROMO_CREATED',
-          entity: { type: 'promotion', id: newPromo.id, label: newPromo.name },
+          entity: { type: 'promotion', id: result.promotion.id, label: dto.name },
           changes: [],
         });
         showToast('success', 'Promoción creada correctamente');
+      }
+
+      // Si hay conflictos de productos, mostrar warnings sin cerrar el diálogo
+      if (warnings?.length) {
+        setActiveWarnings(warnings);
+        return; // el admin ve los warnings y cierra manualmente
       }
 
       setIsDialogOpen(false);
@@ -212,6 +238,8 @@ export default function Promotions() {
         return;
       }
       showToast('fail', err?.message ?? 'No se pudo guardar la promoción');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -221,9 +249,7 @@ export default function Promotions() {
       auditLog({
         action: 'PROMO_TOGGLED',
         entity: { type: 'promotion', id: promo.id, label: promo.name },
-        changes: [
-          { field: 'isActive', oldValue: promo.isActive.toString(), newValue: (!promo.isActive).toString() },
-        ],
+        changes: [{ field: 'isActive', oldValue: String(promo.isActive), newValue: String(!promo.isActive) }],
       });
       showToast('success', `Promoción ${!promo.isActive ? 'activada' : 'desactivada'}`);
     } catch (err: any) {
@@ -246,26 +272,10 @@ export default function Promotions() {
     }
   };
 
-  const getStatusBadge = (promo: Promotion) => {
-    const s = getPromotionStatus(promo.isActive, promo.startsAt, promo.endsAt);
-    const variants = {
-      ACTIVE:    { label: 'Activa',      variant: 'default'   as const },
-      SCHEDULED: { label: 'Programada',  variant: 'secondary' as const },
-      EXPIRED:   { label: 'Expirada',    variant: 'outline'   as const },
-      INACTIVE:  { label: 'Inactiva',    variant: 'outline'   as const },
-    };
-    const config = variants[s];
-    return <Badge variant={config.variant}>{config.label}</Badge>;
-  };
+  const set = (key: keyof typeof EMPTY_FORM) => (val: any) =>
+    setFormData(prev => ({ ...prev, [key]: val }));
 
-  const getScopeLabel = (scope: PromotionScope) => {
-    if (scope.all) return 'Todos los productos';
-    const parts: string[] = [];
-    if (scope.categoryIds?.length) parts.push(`${scope.categoryIds.length} categorías`);
-    if (scope.productIds?.length) parts.push(`${scope.productIds.length} productos`);
-    return parts.join(', ') || 'Sin alcance';
-  };
-
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -279,8 +289,7 @@ export default function Promotions() {
         <div className="flex items-center gap-3">
           <RefreshButton status={status} lastFetch={lastFetch} onRefresh={refresh} />
           <Button onClick={openCreateDialog}>
-            <Plus className="size-4" />
-            Nueva Promoción
+            <Plus className="size-4" /> Nueva Promoción
           </Button>
         </div>
       </div>
@@ -291,10 +300,10 @@ export default function Promotions() {
           <Input
             placeholder="Buscar por nombre..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={e => setSearchQuery(e.target.value)}
           />
         </div>
-        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as PromotionStatus | 'ALL')}>
+        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as PromotionStatus | 'ALL')}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
@@ -320,8 +329,7 @@ export default function Promotions() {
           </p>
           {!searchQuery && statusFilter === 'ALL' && (
             <Button onClick={openCreateDialog}>
-              <Plus className="size-4" />
-              Crear Promoción
+              <Plus className="size-4" /> Crear Promoción
             </Button>
           )}
         </div>
@@ -335,32 +343,30 @@ export default function Promotions() {
                 <TableHead>Estado</TableHead>
                 <TableHead>Vigencia</TableHead>
                 <TableHead>Alcance</TableHead>
-                <TableHead>Stackable</TableHead>
+                <TableHead>Modo</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPromotions.map((promo) => (
+              {filteredPromotions.map(promo => (
                 <TableRow key={promo.id}>
-                  <TableCell>{promo.name}</TableCell>
+                  <TableCell className="font-medium">{promo.name}</TableCell>
                   <TableCell>
-                    <span className="font-medium">
-                      {promo.type === 'PERCENT' ? `${promo.value}%` : `$${promo.value.toFixed(2)}`}
-                    </span>
+                    {promo.type === 'PERCENT'
+                      ? `${promo.value}%`
+                      : `$${promo.value.toFixed(2)}`}
                   </TableCell>
                   <TableCell>{getStatusBadge(promo)}</TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="text-sm text-muted-foreground">
                     {promo.startsAt || promo.endsAt ? (
-                      <div className="flex items-center gap-1 text-muted-foreground">
+                      <div className="flex items-center gap-1">
                         <Calendar className="size-3" />
-                        <span>
-                          {promo.startsAt ? new Date(promo.startsAt).toLocaleDateString() : '∞'}
-                          {' - '}
-                          {promo.endsAt ? new Date(promo.endsAt).toLocaleDateString() : '∞'}
-                        </span>
+                        {promo.startsAt ? new Date(promo.startsAt).toLocaleDateString() : '∞'}
+                        {' - '}
+                        {promo.endsAt ? new Date(promo.endsAt).toLocaleDateString() : '∞'}
                       </div>
                     ) : (
-                      <span className="text-muted-foreground">Sin límite</span>
+                      <span>Sin límite</span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm">
@@ -370,7 +376,9 @@ export default function Promotions() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {promo.stackable && <Badge variant="outline">Sí</Badge>}
+                    <Badge variant={promo.couponRequired ? 'secondary' : 'outline'}>
+                      {promo.couponRequired ? 'Con código' : 'Automática'}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
@@ -378,7 +386,9 @@ export default function Promotions() {
                         <Edit className="size-4" />
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => handleToggle(promo)}>
-                        {promo.isActive ? <PowerOff className="size-4" /> : <Power className="size-4" />}
+                        {promo.isActive
+                          ? <PowerOff className="size-4" />
+                          : <Power className="size-4" />}
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => handleDelete(promo)}>
                         <Trash2 className="size-4 text-destructive" />
@@ -392,26 +402,50 @@ export default function Promotions() {
         </div>
       )}
 
-      {/* Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      {/* Dialog create/edit */}
+      <Dialog open={isDialogOpen} onOpenChange={open => { setIsDialogOpen(open); if (!open) setActiveWarnings([]); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {editingPromo ? 'Editar Promoción' : 'Nueva Promoción'}
-            </DialogTitle>
+            <DialogTitle>{editingPromo ? 'Editar Promoción' : 'Nueva Promoción'}</DialogTitle>
             <DialogDescription>
               {editingPromo ? 'Modifica los detalles de la promoción' : 'Crea una nueva promoción automática'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Warnings de conflicto */}
+            {activeWarnings.length > 0 && (
+              <div className="border border-yellow-300 bg-yellow-50 rounded-lg p-4 space-y-2">
+                <div className="flex items-center gap-2 text-yellow-800 font-medium">
+                  <AlertTriangle className="size-4" />
+                  <span>Promoción guardada con advertencias</span>
+                </div>
+                <p className="text-sm text-yellow-700">
+                  Los siguientes productos ya tienen una promoción activa y fueron excluidos automáticamente:
+                </p>
+                <ul className="text-sm text-yellow-700 list-disc list-inside space-y-1">
+                  {activeWarnings.map(w => (
+                    <li key={w.promotionId}>{w.message}</li>
+                  ))}
+                </ul>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => { setActiveWarnings([]); setIsDialogOpen(false); }}
+                >
+                  Entendido, cerrar
+                </Button>
+              </div>
+            )}
+
             {/* Nombre */}
             <div className="space-y-2">
               <Label htmlFor="name">Nombre *</Label>
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={e => set('name')(e.target.value)}
                 placeholder="Ej: Descuento de Primavera"
               />
               {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
@@ -420,14 +454,9 @@ export default function Promotions() {
             {/* Tipo y Valor */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="type">Tipo de Descuento *</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value: DiscountType) => setFormData({ ...formData, type: value })}
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Label>Tipo de Descuento *</Label>
+                <Select value={formData.type} onValueChange={v => set('type')(v as DiscountType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PERCENT">Porcentaje (%)</SelectItem>
                     <SelectItem value="FIXED">Monto Fijo ($)</SelectItem>
@@ -435,12 +464,11 @@ export default function Promotions() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="value">Valor *</Label>
+                <Label>Valor *</Label>
                 <Input
-                  id="value"
                   type="number"
                   value={formData.value}
-                  onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                  onChange={e => set('value')(e.target.value)}
                   placeholder={formData.type === 'PERCENT' ? '1-90' : '0.00'}
                   step={formData.type === 'PERCENT' ? '1' : '0.01'}
                 />
@@ -451,22 +479,12 @@ export default function Promotions() {
             {/* Vigencia */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="startsAt">Fecha de Inicio</Label>
-                <Input
-                  id="startsAt"
-                  type="date"
-                  value={formData.startsAt}
-                  onChange={(e) => setFormData({ ...formData, startsAt: e.target.value })}
-                />
+                <Label>Fecha de Inicio</Label>
+                <Input type="date" value={formData.startsAt} onChange={e => set('startsAt')(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="endsAt">Fecha de Fin</Label>
-                <Input
-                  id="endsAt"
-                  type="date"
-                  value={formData.endsAt}
-                  onChange={(e) => setFormData({ ...formData, endsAt: e.target.value })}
-                />
+                <Label>Fecha de Fin</Label>
+                <Input type="date" value={formData.endsAt} onChange={e => set('endsAt')(e.target.value)} />
                 {errors.endsAt && <p className="text-sm text-destructive">{errors.endsAt}</p>}
               </div>
             </div>
@@ -476,26 +494,17 @@ export default function Promotions() {
               <Label>Alcance *</Label>
               <div className="space-y-2">
                 <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={formData.scopeAll}
-                    onChange={() => setFormData({ ...formData, scopeAll: true })}
-                  />
+                  <input type="radio" checked={formData.scopeAll} onChange={() => set('scopeAll')(true)} />
                   <span>Todos los productos</span>
                 </label>
                 <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={!formData.scopeAll}
-                    onChange={() => setFormData({ ...formData, scopeAll: false })}
-                  />
+                  <input type="radio" checked={!formData.scopeAll} onChange={() => set('scopeAll')(false)} />
                   <span>Productos/Categorías específicas</span>
                 </label>
               </div>
               {errors.scope && <p className="text-sm text-destructive">{errors.scope}</p>}
             </div>
 
-            {/* Selección de categorías/productos */}
             {!formData.scopeAll && (
               <div className="space-y-4 pl-6 border-l-2">
                 <div className="space-y-2">
@@ -506,12 +515,11 @@ export default function Promotions() {
                         <input
                           type="checkbox"
                           checked={formData.scopeCategoryIds.includes(cat.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({ ...formData, scopeCategoryIds: [...formData.scopeCategoryIds, cat.id] });
-                            } else {
-                              setFormData({ ...formData, scopeCategoryIds: formData.scopeCategoryIds.filter(id => id !== cat.id) });
-                            }
+                          onChange={e => {
+                            const ids = e.target.checked
+                              ? [...formData.scopeCategoryIds, cat.id]
+                              : formData.scopeCategoryIds.filter(id => id !== cat.id);
+                            set('scopeCategoryIds')(ids);
                           }}
                         />
                         <span className="text-sm">{cat.name}</span>
@@ -519,7 +527,6 @@ export default function Promotions() {
                     ))}
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <Label>Productos</Label>
                   <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
@@ -528,12 +535,11 @@ export default function Promotions() {
                         <input
                           type="checkbox"
                           checked={formData.scopeProductIds.includes(prod.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({ ...formData, scopeProductIds: [...formData.scopeProductIds, prod.id] });
-                            } else {
-                              setFormData({ ...formData, scopeProductIds: formData.scopeProductIds.filter(id => id !== prod.id) });
-                            }
+                          onChange={e => {
+                            const ids = e.target.checked
+                              ? [...formData.scopeProductIds, prod.id]
+                              : formData.scopeProductIds.filter(id => id !== prod.id);
+                            set('scopeProductIds')(ids);
                           }}
                         />
                         <span className="text-sm">{prod.name}</span>
@@ -544,13 +550,21 @@ export default function Promotions() {
               </div>
             )}
 
-            {/* Opciones adicionales */}
+            {/* Opciones principales */}
             <div className="space-y-2">
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  checked={formData.couponRequired}
+                  onChange={e => set('couponRequired')(e.target.checked)}
+                />
+                <span>Solo se activa con cupón <span className="text-muted-foreground text-sm">(no se aplica automáticamente)</span></span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
                   checked={formData.stackable}
-                  onChange={(e) => setFormData({ ...formData, stackable: e.target.checked })}
+                  onChange={e => set('stackable')(e.target.checked)}
                 />
                 <span>Permitir acumulación con otras promociones</span>
               </label>
@@ -558,19 +572,68 @@ export default function Promotions() {
                 <input
                   type="checkbox"
                   checked={formData.isActive}
-                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  onChange={e => set('isActive')(e.target.checked)}
                 />
                 <span>Activar inmediatamente</span>
               </label>
             </div>
+
+            {/* Configuración avanzada */}
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => setShowAdvanced(v => !v)}
+            >
+              {showAdvanced ? '▲ Ocultar' : '▼ Mostrar'} configuración avanzada de descuento
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-4 pl-4 border-l-2 border-dashed">
+                <p className="text-xs text-muted-foreground">
+                  Estos límites se calculan sobre el subtotal de los productos participantes.
+                </p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Subtotal mínimo ($)</Label>
+                    <Input
+                      type="number"
+                      value={formData.minSubtotal}
+                      onChange={e => set('minSubtotal')(e.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Piso del descuento (%)</Label>
+                    <Input
+                      type="number"
+                      value={formData.minDiscountPct}
+                      onChange={e => set('minDiscountPct')(e.target.value)}
+                      placeholder="ej: 5"
+                      min="0" max="100"
+                    />
+                    {errors.minDiscountPct && <p className="text-sm text-destructive">{errors.minDiscountPct}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Techo del descuento (%)</Label>
+                    <Input
+                      type="number"
+                      value={formData.maxDiscountPct}
+                      onChange={e => set('maxDiscountPct')(e.target.value)}
+                      placeholder="ej: 30"
+                      min="0" max="100"
+                    />
+                    {errors.maxDiscountPct && <p className="text-sm text-destructive">{errors.maxDiscountPct}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSubmit}>
-              {editingPromo ? 'Actualizar' : 'Crear'} Promoción
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Guardando...' : (editingPromo ? 'Actualizar' : 'Crear')} Promoción
             </Button>
           </DialogFooter>
         </DialogContent>

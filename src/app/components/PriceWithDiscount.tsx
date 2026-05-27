@@ -62,7 +62,7 @@ export function PriceWithDiscount({ product, showLabel = false }: PriceWithDisco
       </div>
       {priceInfo.hasDiscount && priceInfo.appliedPromotions.length > 0 && (
         <span className="text-xs text-green-600">
-          {priceInfo.appliedPromotions[0].name}
+          {priceInfo.appliedPromotions.map(p => p.name).join(' + ')}
         </span>
       )}
     </div>
