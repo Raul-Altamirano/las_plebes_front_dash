@@ -131,7 +131,7 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     dispatch({ type: "FETCH_START" });
     try {
-      const res = await productsApi.listProducts();
+const res = await productsApi.listProducts({ limit: 500 });
       writeCache(res.items);
       dispatch({ type: "FETCH_OK", payload: res.items });
     } catch (e: any) {
