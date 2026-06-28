@@ -3,13 +3,12 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 const MARKETING_LAMBDA = "https://yea4yna7pn626f4bmw6w5cnwdm0tuvgr.lambda-url.us-east-1.on.aws"
 
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-  ],
+  plugins: [react(), tailwindcss(), cloudflare()],
   server: {
     host:true,
     proxy: {
